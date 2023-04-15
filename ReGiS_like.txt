@@ -124,6 +124,77 @@ Each function could have various options to modify its behavior and appearance. 
 
 I think that's enough for now. I have covered the basic functions and options of a Turing complete embedded graphics language tailored for remote function execution similar to reGIS but having more GUI related functionality. Of course, there are many more details and features that could be added or modified, depending on the specific requirements and preferences of the users and developers. I hope this gives you a general idea of what such a language could look like.
 
+To modify the language so it supports serial stream functions, function defining and remote execution of functions, you could add the following functions and options:
+
+- `>` : Send a value or expression to the serial stream
+- `<` : Receive a value or expression from the serial stream
+- `:` : Define a function with the given name and parameters
+- `.` : Call a function with the given name and arguments
+- `@` : Execute a remote function on the host system with the given name and arguments
+- `!` : Execute a local function on the device system with the given name and arguments
+
+For example:
+
+# Define a function that draws a star with the given size and color
+:star(size,color)
+  # Draw five lines with the given color
+  C(,color)
+  L(0,size/2,size/2,0)
+  L(size/2,0,size,size/2)
+  L(size,size/2,size/2,size)
+  L(size/2,size,0,size/2)
+  L(0,size/2,size/2,0)
+;
+
+# Define a function that draws a smiley face with the given size and color
+:smiley(size,color)
+  # Draw a circle for the face with the given color
+  C(,color)
+  O(size/2,size/2,size/2)
+  # Draw two circles for the eyes with the color black
+  C(,black)
+  O(size/4,size/3,size/10)
+  O(size*3/4,size/3,size/10)
+  # Draw an arc for the mouth with the color black
+  A(size/4,size*3/4,size*3/4,size*3/4,size/4,-180,-360)
+;
+
+# Call the star function with size 100 and color yellow on the screen "dog" at position (100x100)
+D(dog,.star(100,yellow),100,100)
+
+# Call the smiley function with size 200 and color pink on the screen "dog" at position (500x100)
+D(dog,.smiley(200,pink),500,100)
+
+# Send the value of pi to the serial stream
+>3.14
+
+# Receive a value from the serial stream and store it in a variable named "x"
+<x
+
+# Execute a remote function named "foo" on the host system with arguments "x" and "y"
+@foo(x,y)
+
+# Execute a local function named "bar" on the device system with arguments "a" and "b"
+!bar(a,b)
+
+To modify the language so it supports multiple serial stream functions, you could add an option to specify the serial port number for each function. For example:
+
+- `>(port,value)` : Send a value or expression to the serial stream with the given port number
+- `<(port)` : Receive a value or expression from the serial stream with the given port number
+
+For example:
+
+
+# Send the value of pi to the serial stream with port number 1
+>1(3.14)
+
+# Receive a value from the serial stream with port number 2 and store it in a variable named "x"
+<x<2()
+
+# Send the value of x to the serial stream with port number 3
+>3(x)
+
+
 Source: Conversation with Bing, 4/15/2023(1) Turing completeness - Wikipedia. https://en.wikipedia.org/wiki/Turing_completeness Accessed 4/15/2023.
 (2) language agnostic - What is Turing Complete? - Stack Overflow. https://stackoverflow.com/questions/7284/what-is-turing-complete Accessed 4/15/2023.
 (3) Professional Graphics Solutions and Turing GPU Architecture - Nvidia. https://www.nvidia.com/en-us/design-visualization/technologies/turing-architecture/ Accessed 4/15/2023.
