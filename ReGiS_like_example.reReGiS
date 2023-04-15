@@ -1,0 +1,45 @@
+#Okay, here is a possible example program in this language drawing a dog
+
+# Define a screen with the name "dog" and the size 800x600 pixels
+S(dog,800,600,white)
+
+# Define a picture with the name "head" and the size 200x200 pixels
+P(head,200,200)
+
+# Draw an oval for the head with the color brown
+O(head,100,100,80,brown)
+
+# Draw two circles for the eyes with the color black
+O(head,70,80,10,black)
+O(head,130,80,10,black)
+
+# Draw a triangle for the nose with the color black
+G(head,100,120,90,140,110,140,black)
+
+# Draw a line for the mouth with the color black
+L(head,100,120,100,130,black)
+
+# Draw two arcs for the ears with the color brown
+A(head,50,50,150,150,50,-90,-180,brown)
+A(head,150,50,250,150,50,-180,-270,brown)
+
+# Define a picture with the name "body" and the size 400x300 pixels
+P(body,400x300)
+
+# Draw an oval for the body with the color brown
+O(body,200x150x150,brown)
+
+# Draw four lines for the legs with the color brown
+L(body,x50,y50,x50,y150,brown)
+L(body,x350,y50,x350,y150,brown)
+L(body,x50,y250,x50,y350,brown)
+L(body,x350,y250,x350,y350,brown)
+
+# Draw an arc for the tail with the color brown
+A(body,x350,y250,x450,y350,x50,-90,-180,brown)
+
+# Draw the head picture on the screen at position (300x100)
+D(dogxheadx300x100)
+
+# Draw the body picture on the screen at position (200x300)
+D(dogxbodyx200x300)
