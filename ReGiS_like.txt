@@ -1,3 +1,8 @@
+prompt:
+use creativity to create function list of turing complete embedded graphics language tailored for remote function execution similar to reGIS in assumptions but having more GUI related functionality
+
+result:
+
 That sounds like a challenging task. A **Turing complete** system is one that can simulate any Turing machine, which is a theoretical model of computation that can perform any algorithm given enough time and memory¹. A **Turing complete embedded graphics language** is one that can express any graphical output that a Turing machine can produce, using a subset of commands or syntax that can be embedded in another system². An example of such a language is **NVIDIA Turing**, which is a graphics architecture that supports real-time ray tracing, AI, simulation, and rasterization³.
 
 **reGIS** is another example of an embedded graphics language that was developed by Digital Equipment Corporation (DEC) for their VT series of computer terminals. reGIS supports vector graphics consisting of lines, circular arcs, and similar shapes, and can be transmitted over a serial interface⁴⁵. However, reGIS has some limitations, such as a fixed resolution of 800x480 pixels, a lack of color support, and a limited set of commands and options⁶.
