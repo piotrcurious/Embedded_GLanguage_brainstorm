@@ -1,0 +1,128 @@
+That sounds like a challenging task. A **Turing complete** system is one that can simulate any Turing machine, which is a theoretical model of computation that can perform any algorithm given enough time and memory¹. A **Turing complete embedded graphics language** is one that can express any graphical output that a Turing machine can produce, using a subset of commands or syntax that can be embedded in another system². An example of such a language is **NVIDIA Turing**, which is a graphics architecture that supports real-time ray tracing, AI, simulation, and rasterization³.
+
+**reGIS** is another example of an embedded graphics language that was developed by Digital Equipment Corporation (DEC) for their VT series of computer terminals. reGIS supports vector graphics consisting of lines, circular arcs, and similar shapes, and can be transmitted over a serial interface⁴⁵. However, reGIS has some limitations, such as a fixed resolution of 800x480 pixels, a lack of color support, and a limited set of commands and options⁶.
+
+To create a function list of a Turing complete embedded graphics language tailored for remote function execution similar to reGIS but having more GUI related functionality, you would need to consider the following aspects:
+
+- **Syntax**: How will you define the commands and options for your language? How will you embed them in another system? How will you handle errors and exceptions?
+- **Semantics**: What will each command and option do? How will they interact with each other and with the underlying system? How will you ensure consistency and compatibility across different platforms and devices?
+- **Graphics**: What kind of graphical primitives and operations will you support? How will you handle colors, fonts, shapes, transformations, animations, etc.? How will you optimize the performance and memory usage of your language?
+- **GUI**: What kind of graphical user interface elements will you support? How will you handle user input, events, widgets, menus, dialogs, etc.? How will you ensure usability and accessibility of your language?
+
+A possible function list for such a language could look something like this:
+
+- `P` : Define a picture or graphic object
+- `S` : Define a screen or display area
+- `D` : Draw a picture or graphic object on a screen
+- `E` : Erase a picture or graphic object from a screen
+- `M` : Move a picture or graphic object to a new position on a screen
+- `R` : Rotate a picture or graphic object around an axis on a screen
+- `Z` : Zoom in or out a picture or graphic object on a screen
+- `C` : Change the color or style of a picture or graphic object
+- `T` : Add text to a picture or graphic object
+- `I` : Add an image to a picture or graphic object
+- `L` : Draw a line between two points on a screen
+- `A` : Draw an arc between two points on a screen
+- `O` : Draw an oval or circle on a screen
+- `Q` : Draw a quadratic curve on a screen
+- `B` : Draw a bezier curve on a screen
+- `G` : Draw a polygon on a screen
+- `F` : Fill an area on a screen with a color or pattern
+- `W` : Define a window or frame on a screen
+- `U` : Define a button or widget on a screen
+- `V` : Define an input field or text box on a screen
+- `X` : Define an output field or label on a screen
+- `Y` : Define an option field or radio button on a screen
+- `K` : Define an action field or checkbox on a screen
+- `N` : Define an menu or list box on a screen
+- `H` : Define an slider or scroll bar on a screen
+- `J` : Define an dialog box or message box on a screen
+
+Each function could have various options to modify its behavior and appearance. For example:
+
+- `P(name,width,height)` : Define a picture with the given name, width, and height in pixels
+- `S(name,width,height,color)` : Define a screen with the given name, width, height, and background color in pixels
+- `D(name,picture,x,y)` : Draw the picture with the given name at the position (x,y) on the screen with the given name
+- `E(name,picture)` : Erase the picture with the given name from the screen with the given name
+- `M(name,picture,dx,dy)` : Move the picture with the given name by the distance (dx,dy) on the screen with the given name
+- `R(name,picture,angle,axis)` : Rotate the picture with the given name by the angle in degrees around the axis (x,y,z) on the screen with the given name
+- `Z(name,picture,scale)` : Zoom in or out the picture with the given name by the scale factor on the screen with the given name
+- `C(name,picture,color,style)` : Change the color or style of the picture with the given name to the color or style on the screen with the given name. The color can be a predefined name or a hexadecimal code. The style can be solid, dashed, dotted, etc.
+- `T(name,picture,text,x,y,size,font,color)` : Add text to the picture with the given name at the position (x,y) with the size, font, and color on the screen with the given name
+- `I(name,picture,image,x,y,width,height)` : Add an image to the picture with the given name at the position (x,y) with the width and height on the screen with the given name. The image can be a file name or a URL.
+- `L(name,x1,y1,x2,y2,color,width,style)` : Draw a line between the points (x1,y1) and (x2,y2) with the color, width, and style on the screen with the given name
+- `A(name,x1,y1,x2,y2,radius,start,end,color,width,style)` : Draw an arc between the points (x1,y1) and (x2,y2) with the radius, start angle, end angle, color, width, and style on the screen with the given name
+- `O(name,x,y,radius,color,width,style)` : Draw an oval or circle with the center (x,y) and radius with the color, width, and style on the screen with the given name
+- `Q(name,x1,y1,x2,y2,x3,y3,color,width,style)` : Draw a quadratic curve with the control points (x1,y1), (x2,y2), and (x3,y3) with the color, width, and style on the screen with the given name
+- `B(name,x1,y1,x2,y2,x3,y3,x4,y4,color,width,style)` : Draw a bezier curve with the control points (x1,y1), (x2,y2), (x3,y3), and (x4,y4) with the color, width, and style on the screen with the given name
+- `G(name,x1,y1,x2,y2,...,xn,yn,color,width,style)` : Draw a polygon with the vertices (x1,y1), (x2,y2), ..., (xn,yn) with the color, width, and style on the screen with the given name
+- `F(name,x1,y1,x2,y2,...,xn,yn,color,pattern)` : Fill an area bounded by the vertices (x1,y1), (x2,y2), ..., (xn,yn) with the color or pattern on the screen with the given name. The pattern can be a predefined name or a file name or a URL.
+- `W(name,x,y,width,height,title,color,border)` : Define a window or frame with the position (x,y), width, height, title, background color, and border on the screen with the given name
+- `U(name,x,y,width,height,label,color,border,callback)` : Define a button or widget with the position (x,y), width, height, label, background color, border, and callback function on the window or frame with the given name
+- `V(name,x,y,width,height,text,color,border,callback)` : Define an input field or text box with the position (x,y), width, height, text, background color, border, and callback function on the window or frame with the given name
+- `X(name,x,y,width,height,text,color,border)` : Define an output field or label with the position (x,y), width, height, text, background color, and border on the window or frame with the given name
+- `Y(name,x,y,width,height,label,color,border,callback)` : Define an option field or radio button with the position (x,y), width, height, label, background color, border, and callback function on the window or frame with the given name
+- `K(name,x,y,width,height,label,color,border,callback)` : Define an action field or checkbox with the position (x,y), width, height, label, background color, border, and callback function on the window or frame with the given name
+- `N(name,x,y,width,height,label,color,border,callback)` : Define an menu or list box with the position (x,y), width, height, label, background color, border, and callback function on the window or frame with the given name
+- `H(name,x,y,width,height,value,min,max,color,border,callback)` : Define an slider or scroll bar with the position (x,y), width, height, value, minimum value, maximum value, background color, border, and callback function on the window or frame with the given name
+- `J(name,x,y,width,height,title,text,color,border,type,callback)` : Define an dialog box or message box with the position (x,y), width, height, title, text, background color, border, type, and callback function on the window or frame with the given name. The type can be one of the following: OK, OK_CANCEL, YES_NO, YES_NO_CANCEL, RETRY_CANCEL, ABORT_RETRY_IGNORE.
+- `@` : Execute a remote function on the host system with the given name and arguments
+- `!` : Execute a local function on the device system with the given name and arguments
+- `?` : Return a value or status from a function or command
+- `#` : Comment out a line or block of code
+- `$` : Define a variable or constant with the given name and value
+- `%` : Use a variable or constant with the given name in an expression
+- `+` : Add two values or expressions
+- `-` : Subtract two values or expressions
+- `*` : Multiply two values or expressions
+- `/` : Divide two values or expressions
+- `^` : Raise a value or expression to a power
+- `&` : Perform a bitwise AND operation on two values or expressions
+- `|` : Perform a bitwise OR operation on two values or expressions
+- `~` : Perform a bitwise NOT operation on a value or expression
+- `<` : Compare if a value or expression is less than another value or expression
+- `>` : Compare if a value or expression is greater than another value or expression
+- `=` : Compare if two values or expressions are equal
+- `<>` : Compare if two values or expressions are not equal
+- `<=` : Compare if a value or expression is less than or equal to another value or expression
+- `>=` : Compare if a value or expression is greater than or equal to another value or expression
+- `(` : Start a group of values or expressions
+- `)` : End a group of values or expressions
+- `[` : Start an array of values or expressions
+- `]` : End an array of values or expressions
+- `{` : Start a block of code
+- `}` : End a block of code
+- `;` : Separate multiple values, expressions, or commands on the same line
+- `\n` : Start a new line
+- `\t` : Insert a tab character
+- `\r` : Insert a carriage return character
+- `\"` : Insert a double quote character
+- `\'` : Insert a single quote character
+- `\\` : Insert a backslash character
+- `\x` : Insert a hexadecimal character code
+
+- `if` : Start a conditional statement
+- `then` : Specify the code to execute if the condition is true
+- `else` : Specify the code to execute if the condition is false
+- `endif` : End a conditional statement
+- `for` : Start a loop statement
+- `to` : Specify the end value of the loop variable
+- `step` : Specify the increment or decrement of the loop variable
+- `next` : End a loop statement
+- `while` : Start a loop statement with a condition
+- `do` : Specify the code to execute while the condition is true
+- `endwhile` : End a loop statement with a condition
+- `break` : Exit a loop statement prematurely
+- `continue` : Skip the rest of the current iteration of a loop statement
+- `return` : Return a value or status from a function or command
+- `exit` : Terminate the execution of the program or script
+
+I think that's enough for now. I have covered the basic functions and options of a Turing complete embedded graphics language tailored for remote function execution similar to reGIS but having more GUI related functionality. Of course, there are many more details and features that could be added or modified, depending on the specific requirements and preferences of the users and developers. I hope this gives you a general idea of what such a language could look like.
+
+Source: Conversation with Bing, 4/15/2023(1) Turing completeness - Wikipedia. https://en.wikipedia.org/wiki/Turing_completeness Accessed 4/15/2023.
+(2) language agnostic - What is Turing Complete? - Stack Overflow. https://stackoverflow.com/questions/7284/what-is-turing-complete Accessed 4/15/2023.
+(3) Professional Graphics Solutions and Turing GPU Architecture - Nvidia. https://www.nvidia.com/en-us/design-visualization/technologies/turing-architecture/ Accessed 4/15/2023.
+(4) ReGIS - HandWiki. https://handwiki.org/wiki/ReGIS Accessed 4/15/2023.
+(5) ReGIS - Remote Graphics Instruction Set - GitHub. https://github.com/feilipu/ReGIS Accessed 4/15/2023.
+(6) feilipu/ReGIS: ReGIS, short for Remote Graphic Instruction Set, is a .... https://registry.platformio.org/libraries/feilipu/ReGIS Accessed 4/15/2023.
+(7) ReGIS Graphics for Arduino & RC2014 | Gone Bush. https://feilipu.me/2022/09/28/regis-serial-graphics-for-arduino-rc2014/ Accessed 4/15/2023.
