@@ -1,0 +1,10 @@
+# Iterative Factoring in EGL
+
+$n = 5;
+$res = 1;
+
+@($i, 1, $n, 1) {
+    $res = $res * $i;
+}
+
+>($res);

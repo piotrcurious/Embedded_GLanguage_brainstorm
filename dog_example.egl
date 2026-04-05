@@ -1,0 +1,39 @@
+# Finalizing the dog example and other tests
+
+S(800, 600, "white");
+
+:head($hx, $hy) {
+    [
+        M($hx, $hy);
+        F("brown");
+        O(80, 80);
+        F("black");
+        $lx = $hx - 30; $ly = $hy - 20; M($lx, $ly); C(10);
+        $rx = $hx + 30; $ry = $hy - 20; M($rx, $ry); C(10);
+        $nx = $hx; $ny = $hy + 20; M($nx, $ny); C(10);
+        K("black", 2);
+        M($hx, $hy + 20); $my = $hy + 40; L($hx, $my);
+        F("brown");
+        $ex1 = $hx - 60; $ey1 = $hy - 60; M($ex1, $ey1); C(30);
+        $ex2 = $hx + 60; $ey2 = $hy - 60; M($ex2, $ey2); C(30);
+    ]
+}
+
+:body($bx, $by) {
+    [
+        M($bx, $by);
+        F("brown");
+        O(150, 100);
+        K("brown", 10);
+        $x1 = $bx - 100; $y1a = $by + 50; $y1b = $by + 150; M($x1, $y1a); L($x1, $y1b);
+        $x2 = $bx + 100; $y2a = $by + 50; $y2b = $by + 150; M($x2, $y2a); L($x2, $y2b);
+        $x3 = $bx - 50; $y3a = $by + 80; $y3b = $by + 180; M($x3, $y3a); L($x3, $y3b);
+        $x4 = $bx + 50; $y4a = $by + 80; $y4b = $by + 180; M($x4, $y4a); L($x4, $y4b);
+        $tx = $bx + 140; $ty = $by - 20; M($tx, $ty);
+        K("brown", 5);
+        V(40, -40);
+    ]
+}
+
+!body(400, 300);
+!head(350, 200);

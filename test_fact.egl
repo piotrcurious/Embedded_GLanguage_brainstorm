@@ -1,0 +1,16 @@
+# Factoring test for EGL
+# Verifies basic recursion
+
+:fact($n) {
+    ?($n <= 1) {
+        $result = 1;
+    } : {
+        $v = $n - 1;
+        !fact($v);
+        $result = $n * $result;
+    }
+}
+
+$result = 0;
+!fact(5); # 120
+>($result);
