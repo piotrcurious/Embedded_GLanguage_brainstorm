@@ -1,0 +1,28 @@
+# EGL v1.4 Interactive UI Demo
+# Demonstrates Hit Zones (HZ) and Callbacks
+
+S(400, 300, "white");
+
+# Define variables
+$count = 0;
+
+# Callbacks
+:INC() { $count = $count + 1; >("Count is now " + $count); }
+:DEC() { $count = $count - 1; >("Count is now " + $count); }
+
+# Draw UI
+F("lightgray"); K("black", 1);
+M(50, 50); BX(50, 50, 100, 50); # INC Button
+M(60, 80); T("PLUS");
+HZ("btn1", 50, 50, 100, 50, "INC");
+
+M(250, 50); BX(250, 50, 100, 50); # DEC Button
+M(260, 80); T("MINUS");
+HZ("btn2", 250, 50, 100, 50, "DEC");
+
+# Display Count
+M(150, 150); K("blue"); T("Count: " + $count);
+
+# In real use, this script runs in a loop
+DE(); # Dispatch events (like a mouse click on btn1)
+FB();

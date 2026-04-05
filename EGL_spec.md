@@ -1,54 +1,44 @@
-# EGL (Embedded Graphics Language) Specification v1.3
+# EGL (Embedded Graphics Language) Specification v1.4
 
-EGL is a compact, stack-based graphics language designed for serial execution (SPI/I2C/UART) between a host (e.g., Microcontroller) and a display processor. It is Turing-complete and optimized for state management and UI/game graphics.
+EGL is a compact, stack-based graphics language designed for serial execution (SPI/I2C/UART). It is Turing-complete and optimized for interactive UI/game graphics.
 
-## Data Types
-- **Numbers:** Floating-point or integers.
-- **Strings:** Double or single quoted.
-- **Variables:** Prefixed with `$`. Global or local (within functions).
-- **Arrays:** Dynamically allocated.
-
-## Control Flow
+## Control Flow & Logic
 - **Variables:** `$var = expr;`
 - **Functions:** `:name(p1, p2) { body }` - Define; `!name(a1, a2);` - Call.
 - **Conditionals:** `?(expr) { if_true } : { if_false }`
-- **Loops:** `@($var, start, end, step) { body }` (For-loop)
-- **Loops:** `WH(expr) { body }` (While-loop)
+- **Loops:** `@($var, start, end, step) { body }` (For); `WH(expr) { body }` (While).
 
-## Array Commands
-- `AA(id, size)`: Allocate array `id` with `size` elements.
-- `AV(id, idx, val)`: Set array `id` at `idx` to `val`.
-- `AG(id, idx)`: Get array `id` at `idx` and store in `$result`.
+## Interactivity & Events (New in v1.4)
+- `HZ(id, x, y, w, h, func)`: Define a clickable hit zone that triggers EGL function `func`.
+- `MC(x, y, btn)`: Inject a Mouse Click event.
+- `KC(src, key)`: Inject a Key Click event from source `src`.
+- `DE()`: **Dispatch Events**: Process injected events, check hit zones, and run callbacks.
+- **Special Functions:** `:ON_KEY` is called automatically by `DE()` for every `KC` event.
+- **Special Variables:** `$last_key` and `$last_key_src` hold the details of the most recent key event during `ON_KEY`.
 
-## Graphics Commands
-- `S(w, h, [bg])`: Initialize main surface with **Double Buffering** support. Drawing targets the back-buffer.
-- `FB()`: **Flip Buffer**: Copy the back-buffer to the front-buffer.
-- `VS()`: **Wait Sync**: Simulate/wait for vertical synchronization.
-- `P(id, [w, h])`: Define or switch to an off-screen buffer (sprite/canvas). Supports **Nesting** by blitting one buffer into another.
-- `D(id, x, y)`: Basic blit.
+## Data Handling
+- `AA(id, size)`, `AV(id, idx, val)`, `AG(id, idx)`: Array management.
+- `>(expr)`: Serial Output. If `$var`, outputs `[EGL:VAR:NAME:VAL]`.
+- `<($var)`: Serial Input. Reads next value from input buffer.
+- `SA()`: **Serial Available**: Returns 1 if input buffer has data, 0 otherwise.
+
+## Graphics & Rendering
+- `S(w, h, [bg])`: Initialize main surface (Double Buffered).
+- `FB()` / `VS()`: Flip Buffer and Wait Sync.
+- `P(id, [w, h])`: Define/switch to an off-screen buffer (supports Nesting).
 - `DX(id, x, y, [rot], [scale], [alpha], [sx, sy, sw, sh])`: Advanced blit.
-- `B(x, y, w, h, c1, c2, [dir])`: Gradient Bar.
-- `BX(x, y, w, h)`: Fill rectangle at current position using `F` and `K` styles.
-- `K(color, [width])`: Set stroke color/width.
-- `F(color)`: Set fill color.
-- `M(x, y)`, `R(dx, dy)`: Move (Absolute/Relative).
-- `L(x, y)`, `V(dx, dy)`: Line (Absolute/Relative).
-- `C(r)`, `O(rx, ry)`: Circle/Ellipse.
-- `G(x1, y1, ...)`: Polygon.
-- `T(text)`: Text.
+- `B(x, y, w, h, c1, c2, [dir])`, `BX(x, y, w, h)`: Gradient/Fast Rectangle.
+- `K(color, [width])`, `F(color)`: Style settings.
+- `M(x, y)`, `L(x, y)`, `C(r)`, `O(rx, ry)`, `G(x1, y1, ...)`, `T(text)`: Primitives.
 - `Z(x, y, w, h)`: Clipping zone.
-- `WN(id, x, y, w, h, title)`: UI Window frame.
-- `UB(id, label, x, y, w, h)`, `UX(id, label, x, y)`: UI Buttons/Labels.
-- `[` / `]`: Push/Pop graphics state. Correctly handles `active_surface` for hierarchical rendering.
-
-## Serial & System
-- `>(expr)`: Serial Output. If `expr` is a `$var`, outputs `[EGL:VAR:NAME:VAL]`.
-- `<($var)`: Serial Input. Reads next value from host input buffer into `$var`.
-- `*(func, args...)`: Remote Procedure Call to host.
+- `[` / `]`: Push/Pop graphics state.
 
 ## Built-in Math & Operators
-Supports: `sin(x)`, `cos(x)`, `tan(x)`, `sqrt(x)`, `abs(x)`, `min(a, b)`, `max(a, b)`, `pi`, `e`, `int(x)`, `float(x)`, `pow(a, b)`, `round(x)`.
-Bitwise operators supported: `&` (AND), `|` (OR), `^` (XOR), `~` (NOT), `<<` (LSHIFT), `>>` (RSHIFT).
+Full expression support including bitwise: `&`, `|`, `^`, `~`, `<<`, `>>` and math functions: `sin`, `cos`, `tan`, `sqrt`, `abs`, `min`, `max`, `int`, `float`, `pow`, `round`, `len`.
 
-## Double Buffering Paradigm
-EGL v1.3 uses a dual-buffer system for the "main" surface. All drawing operations are performend on the invisible **back-buffer**. To display the result, you must call `FB()`. This ensures that complex scene updates appear instantly and without flickering or "tearing".
+## Double Buffering & Events Workflow
+Interactive EGL scripts typically follow a loop:
+1. `DE()` - Process any input events from the host.
+2. Update game/UI logic based on variables and callbacks.
+3. Draw current state to back-buffer.
+4. `VS()` and `FB()` to update the display.
