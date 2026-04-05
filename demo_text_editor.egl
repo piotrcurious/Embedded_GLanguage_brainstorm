@@ -1,0 +1,24 @@
+# EGL v1.4 Interactive Text Editor Demo
+# Host-parameterized text rendering ($text_buffer)
+
+S(400, 200, "white");
+K("blue", 2); F("gray");
+BX(0, 0, 400, 50);
+
+M(10, 20); K("white"); T("EGL MOCK ARDUINO EDITOR");
+
+# Render the text from the host buffer
+M(10, 80); K("black");
+# Use raw string from host
+$disp = "Text: " + $text_buffer;
+T($disp);
+
+# Callback for simulated "Key Input" events
+:ON_KEY() {
+    # If this was real-time, we'd update $text_buffer here or
+    # signal the host that we received the key.
+    >($last_key);
+}
+
+DE(); # Process any KC events injected by the host
+FB(); # Update front buffer
