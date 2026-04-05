@@ -57,8 +57,13 @@ class EGLInterpreter:
         self.serial_out = []
 
     def set_var(self, name, val):
-        if self.scopes: self.scopes[-1][name] = val
-        else: self.globals[name] = val
+        # Always check global scope first for updates to existing globals
+        if name in self.globals:
+            self.globals[name] = val
+        elif self.scopes:
+            self.scopes[-1][name] = val
+        else:
+            self.globals[name] = val
 
     def get_var(self, name):
         for scope in reversed(self.scopes):
@@ -69,6 +74,7 @@ class EGLInterpreter:
         if isinstance(expr, (int, float)): return expr
         s = str(expr).strip()
         if not s: return 0
+        if (s.startswith('"') and s.endswith('"')) or (s.startswith("'") and s.endswith("'")): return s[1:-1]
 
         all_vars = self.globals.copy()
         for scope in self.scopes: all_vars.update(scope)
@@ -81,8 +87,7 @@ class EGLInterpreter:
             "max": lambda a, b: max(getattr(a, 'val', a), getattr(b, 'val', b)), "pi": math.pi,
             "int": lambda x: int(getattr(x, 'val', x)), "float": lambda x: float(getattr(x, 'val', x)),
             "pow": lambda a, b: pow(getattr(a, 'val', a), getattr(b, 'val', b)),
-            "round": lambda x: round(getattr(x, 'val', x)), "len": lambda x: len(getattr(x, 'val', x)), "str": str,
-            "__num__": lambda x: EGLValue(x), "__str__": lambda x: EGLValue(x)
+            "round": lambda x: round(getattr(x, 'val', x)), "len": lambda x: len(getattr(x, 'val', x)), "str": str
         }
 
         processed = s
@@ -277,8 +282,6 @@ class EGLInterpreter:
                 body, rest = self.parse_balanced(code[i:], '{', '}'); next_i = len(code) - len(rest)
                 eval_res = self.eval_expr(cond_s)
                 if eval_res: self.run_code(body)
-
-                # Check for else block regardless of eval_res to skip it correctly
                 k = 0
                 while k < len(rest) and rest[k].isspace(): k += 1
                 if k < len(rest) and rest[k] == ':':
@@ -293,7 +296,8 @@ class EGLInterpreter:
                 i += 2; cond_s, rest = self.parse_balanced(code[i:], '(', ')'); i = len(code) - len(rest)
                 while i < len(code) and code[i] != '{': i += 1
                 body, rest = self.parse_balanced(code[i:], '{', '}'); next_i = len(code) - len(rest)
-                while self.eval_expr(cond_s): self.run_code(body)
+                while self.eval_expr(cond_s):
+                    self.run_code(body)
                 i = next_i; continue
             if code[i] == '@':
                 i += 1; args_s, rest = self.parse_balanced(code[i:], '(', ')')

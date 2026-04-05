@@ -10,7 +10,7 @@ $count = 0;
 :INC() { $count = $count + 1; >("Count is now " + $count); }
 :DEC() { $count = $count - 1; >("Count is now " + $count); }
 
-# Draw UI
+# 1. Draw UI (to register hit zones)
 F("lightgray"); K("black", 1);
 M(50, 50); BX(50, 50, 100, 50); # INC Button
 M(60, 80); T("PLUS");
@@ -20,9 +20,12 @@ M(250, 50); BX(250, 50, 100, 50); # DEC Button
 M(260, 80); T("MINUS");
 HZ("btn2", 250, 50, 100, 50, "DEC");
 
-# Display Count
-M(150, 150); K("blue"); T("Count: " + $count);
+# 2. Process Events (Injected by host)
+DE();
 
-# In real use, this script runs in a loop
-DE(); # Dispatch events (like a mouse click on btn1)
+# 3. Display Count
+M(150, 150); K("blue");
+# Test direct expression in T
+T("Count: " + $count);
+
 FB();
