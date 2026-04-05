@@ -2,7 +2,7 @@ import re
 import math
 import sys
 import argparse
-import json
+import time
 from PIL import Image, ImageDraw, ImageFont, ImageChops
 
 class EGLInterpreter:
@@ -17,6 +17,7 @@ class EGLInterpreter:
         self.state_stack = []
         self.images = {"main": None}
         self.draws = {"main": None}
+        self.front_buffer = None # Front-buffer for double buffering
         self.active_surface = "main"
         self.pos = (0, 0)
         self.stroke_color = "black"
@@ -60,7 +61,6 @@ class EGLInterpreter:
             except: pass
 
         try:
-            # Add bitwise and more math to scope
             scope = {"__builtins__": None, "math": math, "cos": lambda x: math.cos(float(x)), "sin": lambda x: math.sin(float(x)),
                      "tan": lambda x: math.tan(float(x)), "sqrt": lambda x: math.sqrt(float(x)), "abs": abs, "min": min, "max": max, "pi": math.pi,
                      "int": int, "float": float, "pow": pow, "round": round}
@@ -111,12 +111,21 @@ class EGLInterpreter:
             if cmd == 'S':
                 w, h = int(float(args[0])), int(float(args[1]))
                 bg = args[2] if len(args) > 2 else "white"
-                self.images["main"] = Image.new("RGBA", (w, h), self._get_rgba(bg)); self.draws["main"] = ImageDraw.Draw(self.images["main"]); self.active_surface = "main"; self.clip = None
+                self.images["main"] = Image.new("RGBA", (w, h), self._get_rgba(bg))
+                self.draws["main"] = ImageDraw.Draw(self.images["main"])
+                self.front_buffer = Image.new("RGBA", (w, h), self._get_rgba(bg))
+                self.active_surface = "main"; self.clip = None
+            elif cmd == 'FB': # Flip Buffer (Front-Back flip)
+                if "main" in self.images and self.front_buffer:
+                    self.front_buffer.paste(self.images["main"])
+            elif cmd == 'VS': # Wait Sync
+                print("VSYNC WAIT") # In real emu: time.sleep(1/60)
             elif cmd == 'P':
                 id = str(args[0])
                 if len(args) >= 3:
                     w, h = int(float(args[1])), int(float(args[2]))
-                    self.images[id] = Image.new("RGBA", (w, h), (0,0,0,0)); self.draws[id] = ImageDraw.Draw(self.images[id])
+                    self.images[id] = Image.new("RGBA", (w, h), (0,0,0,0))
+                    self.draws[id] = ImageDraw.Draw(self.images[id])
                 self.active_surface = id; self.clip = None
             elif cmd == 'D':
                 id, x, y = str(args[0]), float(args[1]), float(args[2])
@@ -157,19 +166,19 @@ class EGLInterpreter:
                         if dir == 0: d.line([(i, 0), (i, h)], fill=curr_c)
                         else: d.line([(0, i), (w, i)], fill=curr_c)
                     img.paste(base, (int(x), int(y)), base)
-            elif cmd == 'BX': # BX(x, y, w, h) - Fill Rect at current style
+            elif cmd == 'BX':
                 x, y, w, h = map(float, args[0:4])
                 if draw: draw.rectangle([x, y, x+w, y+h], fill=self._get_rgba(self.fill_color), outline=self._get_rgba(self.stroke_color), width=self.stroke_width)
             elif cmd == 'Z':
                 if len(args) >= 4: self.clip = (float(args[0]), float(args[1]), float(args[2]), float(args[3]))
                 else: self.clip = None
-            elif cmd == 'AA': # AA(id, size) - Array Allocate
+            elif cmd == 'AA':
                 id, sz = str(args[0]), int(float(args[1]))
                 self.arrays[id] = [0] * sz
-            elif cmd == 'AV': # AV(id, idx, val) - Array Set
+            elif cmd == 'AV':
                 id, idx, val = str(args[0]), int(float(args[1])), args[2]
                 if id in self.arrays: self.arrays[id][idx] = val
-            elif cmd == 'AG': # AG(id, idx) -> $result - Array Get
+            elif cmd == 'AG':
                 id, idx = str(args[0]), int(float(args[1]))
                 if id in self.arrays: self.set_var("$result", self.arrays[id][idx])
             elif cmd == 'K':
@@ -200,7 +209,7 @@ class EGLInterpreter:
                     try: f = ImageFont.load_default()
                     except: f = None
                     draw.text(self.pos, str(args[0]), fill=self._get_rgba(self.stroke_color), font=f)
-            elif cmd == 'WN' and len(args) >= 6: # Renamed from W to WN
+            elif cmd == 'WN' and len(args) >= 6:
                 id, x, y, w, h, title = args
                 if draw:
                     draw.rectangle([float(x), float(y), float(x+w), float(y+h)], outline="gray", width=2); draw.rectangle([float(x), float(y), float(x+w), float(y+20)], fill="gray")
@@ -221,7 +230,7 @@ class EGLInterpreter:
                 v = args[0]
                 msg = f"[EGL:VAR:{v}]" if isinstance(v, str) and v.startswith('$') else str(v)
                 self.serial_out.append(msg); print(f"SERIAL OUT: {msg}")
-            elif cmd == '<': # <($var) - Serial In
+            elif cmd == '<':
                 vn = str(args[0]).strip('()$ ')
                 val = self.serial_in.pop(0) if self.serial_in else 0
                 self.set_var('$' + vn, val)
@@ -268,7 +277,7 @@ class EGLInterpreter:
                         if not eval_res: self.run_code(eb)
                         next_i = len(code) - len(rest2)
                 i = next_i; continue
-            if code[i] == 'W' and i+1 < len(code) and code[i+1] == 'H': # WH Loop
+            if code[i:i+2] == 'WH':
                 i += 2; cond_s, rest = self.parse_balanced(code[i:], '(', ')'); i = len(code) - len(rest)
                 while i < len(code) and code[i] != '{': i += 1
                 body, rest = self.parse_balanced(code[i:], '{', '}'); next_i = len(code) - len(rest)
@@ -337,7 +346,9 @@ if __name__ == "__main__":
     with open(args.file, 'r') as f: code = f.read()
     it = EGLInterpreter(initial_vars=init_vars, serial_in=ser_in)
     it.run_code(code)
-    if it.images["main"]:
-        it.images["main"].save(args.output)
+    # Target front_buffer for final output if it exists
+    out_img = it.front_buffer if it.front_buffer else it.images.get("main")
+    if out_img:
+        out_img.save(args.output)
         print(f"Saved to {args.output}")
     print("Done.")

@@ -1,0 +1,30 @@
+# EGL v1.3 Nested Canvas Demo
+# Demonstrates how a canvas (sprite) can be a canvas for other objects.
+
+S(800, 600, "#222");
+
+# Canvas 1: Sub-surface for a "Window"
+P("win", 300, 200);
+F("gray"); K("white", 2);
+BX(0, 0, 300, 200);
+M(10, 10); T("NESTED WINDOW");
+
+# Canvas 2: Sub-surface for an "Icon"
+P("icon", 32, 32);
+F("yellow"); K("black", 1);
+M(16, 16); C(12); # Yellow face
+F("black"); M(10, 10); C(2); M(22, 10); C(2); # Eyes
+
+# Blit Icon into Window Canvas (Nesting)
+P("win");
+DX("icon", 40, 60);
+DX("icon", 40, 100);
+F("black"); M(70, 50); T("Nested icon A");
+M(70, 90); T("Nested icon B");
+
+# Blit Window into Main Canvas
+P("main");
+DX("win", 200, 200);
+DX("win", 500, 400, 30, 0.8, 0.7); # Rotated, scaled, semi-transparent window
+
+FB(); # Show the result
