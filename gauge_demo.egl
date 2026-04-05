@@ -1,0 +1,39 @@
+# Gauge Demo: Parameterized EGL Gauge
+# Run with: python3 egl_interpreter.py gauge_demo.egl --vars val=75
+
+S(400, 400, "black");
+
+# Background: Circular gradient-like effect
+F("gray"); K("white", 2);
+M(200, 200); C(150);
+
+# Use a gradient bar as a decorative element (copper-style)
+B(50, 320, 300, 40, "#FF8C00", "#FFD700", 1);
+M(100, 335); K("black"); T("EGL PRESSURE GAUGE");
+
+# Tick marks
+K("white", 3);
+@($i, 0, 180, 30) {
+    [
+        $rad = (180 + $i) * 3.14159 / 180;
+        $x1 = 200 + 130 * cos($rad);
+        $y1 = 200 + 130 * sin($rad);
+        $x2 = 200 + 145 * cos($rad);
+        $y2 = 200 + 145 * sin($rad);
+        M($x1, $y1); L($x2, $y2);
+    ]
+}
+
+# Value needle (parameterized by $val from host, 0-100)
+$angle = 180 + ($val / 100 * 180);
+$rad_n = $angle * 3.14159 / 180;
+$nx = 200 + 120 * cos($rad_n);
+$ny = 200 + 120 * sin($rad_n);
+
+K("red", 5);
+M(200, 200); L($nx, $ny);
+
+# Digital readout
+F("black"); K("white", 1);
+M(180, 260); T($val);
+R(30, 0); T(" PSI");

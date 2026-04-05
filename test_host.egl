@@ -1,0 +1,1 @@
+$result = $host_val * 2; >($result);

@@ -1,54 +1,43 @@
-# EGL (Embedded Graphics Language) Specification - Version 1.1
+# EGL (Embedded Graphics Language) Specification v1.1
 
-EGL is a high-performance, compact graphics language designed for remote execution over serial links. It combines the brevity of ReGIS with the programmable power of PostScript.
+EGL is a compact, stack-based graphics language designed for serial execution (SPI/I2C/UART) between a host (e.g., Microcontroller) and a display processor. It is Turing-complete and optimized for state management and UI/game graphics.
 
-## 1. Syntax & Core Concepts
+## Data Types
+- **Numbers:** Floating-point or integers.
+- **Strings:** Double or single quoted.
+- **Variables:** Prefixed with `$`. Global or local (within functions).
 
-- **Commands**: Single characters followed by optional arguments in parentheses. e.g., `L(100,100)`.
-- **Arguments**: Comma-separated literal values or expressions.
-- **Expressions**: Standard infix notation with support for variables and common math functions (`cos`, `sin`, `sqrt`, etc.).
-- **Variables**: Prefixed with `$`. Global by default. e.g., `$x = 10`.
-- **Blocks**: Enclosed in curly braces `{ }`.
-- **Functions**: Defined with `:name(p1, p2...) { ... }` and called with `!name(a1, a2...)`.
+## Control Flow
+- **Variables:** `$var = expr;`
+- **Functions:** `:name(p1, p2) { body }` - Define; `!name(a1, a2);` - Call.
+- **Conditionals:** `?(expr) { if_true } : { if_false }`
+- **Loops:** `@($var, start, end, step) { body }`
 
-## 2. Graphics State & Primitives
+## Core Commands
+- `S(w, h, [bg])`: Initialize main surface with width `w`, height `h`.
+- `P(id, [w, h])`: Define or switch to an off-screen buffer (sprite).
+- `D(id, x, y)`: Basic blit: draw buffer `id` at `(x, y)`.
+- `DX(id, x, y, [rot], [scale], [alpha], [sx, sy, sw, sh])`: Advanced blit: Draw buffer `id` at `(x, y)` with optional rotation, scaling, alpha transparency, and source sub-rectangle (cropping/tiling).
+- `B(x, y, w, h, c1, c2, [dir])`: Gradient Bar: Draw a gradient from color `c1` to `c2` in direction `dir` (0=Horizontal, 1=Vertical).
+- `K(color, [width])`: Set stroke color and width.
+- `F(color)`: Set fill color ("None" for no fill).
+- `M(x, y)`: Move cursor to absolute `(x, y)`.
+- `R(dx, dy)`: Move cursor relative by `(dx, dy)`.
+- `L(x, y)`: Draw line to absolute `(x, y)`.
+- `V(dx, dy)`: Draw line to relative `(dx, dy)`.
+- `C(r)`: Draw circle with radius `r` at current position.
+- `O(rx, ry)`: Draw ellipse at current position.
+- `G(x1, y1, x2, y2, ...)`: Draw closed polygon.
+- `T(text)`: Render text at current position.
+- `Z(x, y, w, h)`: Set clipping zone (viewport). Empty `Z()` to clear.
+- `[`: Push graphics state (pos, colors, surface, clip) to stack.
+- `]`: Pop graphics state from stack.
+- `>(expr)`: Serial Output (for debugging or host feedback).
+- `<($var)`: Serial Input (stubs to host input).
+- `*(func, args...)`: Remote Procedure Call to host.
 
-The interpreter maintains a "Graphics State" (current position, stroke color, fill color, font, line width, active surface).
+## Built-in Math
+Supports: `sin(x)`, `cos(x)`, `tan(x)`, `sqrt(x)`, `abs(x)`, `min(a, b)`, `max(a, b)`, `pi`, `e`.
 
-### State Management
-- `[` : Push current graphics state onto the stack.
-- `]` : Pop and restore graphics state from the stack.
-- `K(color, width)` : Set Stroke (color: hex `#RRGGBB` or name, width: pixels).
-- `F(color)` : Set Fill color. Use `"None"` to disable filling.
-- `M(x, y)` : Move pen to absolute `(x, y)`.
-- `R(dx, dy)` : Move pen relative to current position.
-
-### Drawing
-- `L(x, y)` : Draw line to absolute `(x, y)`. Updates pen position.
-- `V(dx, dy)` : Draw line to relative `(dx, dy)`. Updates pen position.
-- `C(r)` : Draw circle with radius `r` centered at current position.
-- `O(rx, ry)` : Draw oval with radii `rx`, `ry` centered at current position.
-- `G(x1,y1, x2,y2, ...)` : Draw polygon.
-- `T("text")` : Draw text at current position.
-
-### Sprite & Surface Management
-- `S(w, h, bg)` : Initialize the main screen and set as active surface.
-- `P(id, w, h)` : Define an off-screen buffer (sprite) with unique ID and set as active surface.
-- `D(id, x, y)` : Draw (blit) buffer `id` at `(x, y)` onto the active surface.
-
-## 3. UI Framework (Host-Side Stubs)
-
-- `W(id, x, y, w, h, "title")` : Define a window.
-- `UB(id, "label", x, y, w, h, "callback")` : Button.
-- `UX(id, "label", x, y, w, h)` : Label.
-
-## 4. Programming & Control Flow
-
-- `?(cond) { ... } [ : { ... } ]` : If-else conditional.
-- `@($i, start, end, step) { ... }` : For loop.
-- Recursive functions are supported.
-
-## 5. Serial & Remote I/O
-- `>(val)` : Write value to serial output.
-- `<($var)` : Read value from serial input into variable.
-- `*(func, args)` : Remote call to host.
+## Host Integration
+The interpreter can be pre-loaded with host variables using `--vars key=val,key2=val2`. This allows the host to pass dynamic data (sensor readings, state) to an EGL script.
