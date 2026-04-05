@@ -1,0 +1,13 @@
+# Simplified Fibonacci (Iterative) to test basic Turing functionality
+
+$n = 6;
+$a = 0;
+$b = 1;
+
+@($i, 1, $n, 1) {
+    $temp = $a + $b;
+    $a = $b;
+    $b = $temp;
+}
+
+>($a);
