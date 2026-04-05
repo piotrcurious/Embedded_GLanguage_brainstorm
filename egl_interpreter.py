@@ -13,19 +13,21 @@ class EGLValue:
     def __add__(self, other):
         v1, v2 = self.val, getattr(other, 'val', other)
         if isinstance(v1, str) or isinstance(v2, str): return EGLValue(str(v1) + str(v2))
-        return EGLValue(v1 + v2)
+        try: return EGLValue(v1 + v2)
+        except: return EGLValue(str(v1) + str(v2))
     def __radd__(self, other):
         v1, v2 = getattr(other, 'val', other), self.val
         if isinstance(v1, str) or isinstance(v2, str): return EGLValue(str(v1) + str(v2))
-        return EGLValue(v1 + v2)
-    def __sub__(self, other): return EGLValue(self.val - getattr(other, 'val', other))
-    def __rsub__(self, other): return EGLValue(getattr(other, 'val', other) - self.val)
-    def __mul__(self, other): return EGLValue(self.val * getattr(other, 'val', other))
-    def __rmul__(self, other): return EGLValue(getattr(other, 'val', other) * self.val)
-    def __truediv__(self, other): return EGLValue(self.val / getattr(other, 'val', other))
-    def __rtruediv__(self, other): return EGLValue(getattr(other, 'val', other) / self.val)
-    def __mod__(self, other): return EGLValue(self.val % getattr(other, 'val', other))
-    def __rmod__(self, other): return EGLValue(getattr(other, 'val', other) % self.val)
+        try: return EGLValue(v1 + v2)
+        except: return EGLValue(str(v1) + str(v2))
+    def __sub__(self, other): return EGLValue(float(self.val) - float(getattr(other, 'val', other)))
+    def __rsub__(self, other): return EGLValue(float(getattr(other, 'val', other)) - float(self.val))
+    def __mul__(self, other): return EGLValue(float(self.val) * float(getattr(other, 'val', other)))
+    def __rmul__(self, other): return EGLValue(float(getattr(other, 'val', other)) * float(self.val))
+    def __truediv__(self, other): return EGLValue(float(self.val) / float(getattr(other, 'val', other)))
+    def __rtruediv__(self, other): return EGLValue(float(getattr(other, 'val', other)) / float(self.val))
+    def __mod__(self, other): return EGLValue(float(self.val) % float(getattr(other, 'val', other)))
+    def __rmod__(self, other): return EGLValue(float(getattr(other, 'val', other)) % float(self.val))
     def __xor__(self, other): return EGLValue(int(float(self.val)) ^ int(float(getattr(other, 'val', other))))
     def __and__(self, other): return EGLValue(int(float(self.val)) & int(float(getattr(other, 'val', other))))
     def __or__(self, other): return EGLValue(int(float(self.val)) | int(float(getattr(other, 'val', other))))
@@ -51,6 +53,8 @@ class EGLInterpreter:
         self.arrays = {}
         self.hit_zones = []
         self.event_queue = []
+        self.key_states = {}
+        self.palette = ["black"] * 256
         self.state_stack = []
         self.images = {"main": None}
         self.draws = {"main": None}
@@ -61,6 +65,7 @@ class EGLInterpreter:
         self.stroke_width = 1
         self.fill_color = None
         self.clip = None
+        self.target_fps = 0
         self.serial_in = serial_in if serial_in else []
         self.serial_out = []
         self.start_time = time.time()
@@ -88,35 +93,50 @@ class EGLInterpreter:
             "__builtins__": None, "math": math,
             "cos": lambda x: math.cos(float(getattr(x, 'val', x))), "sin": lambda x: math.sin(float(getattr(x, 'val', x))),
             "tan": lambda x: math.tan(float(getattr(x, 'val', x))), "sqrt": lambda x: math.sqrt(float(getattr(x, 'val', x))),
-            "abs": lambda x: abs(getattr(x, 'val', x)), "min": lambda a, b: min(getattr(a, 'val', a), getattr(b, 'val', b)),
-            "max": lambda a, b: max(getattr(a, 'val', a), getattr(b, 'val', b)), "pi": math.pi,
+            "abs": lambda x: abs(float(getattr(x, 'val', x))), "min": lambda a, b: min(float(getattr(a, 'val', a)), float(getattr(b, 'val', b))),
+            "max": lambda a, b: max(float(getattr(a, 'val', a)), float(getattr(b, 'val', b))), "pi": math.pi,
             "int": lambda x: int(float(getattr(x, 'val', x))), "float": lambda x: float(getattr(x, 'val', x)),
-            "pow": lambda a, b: pow(getattr(a, 'val', a), getattr(b, 'val', b)),
-            "round": lambda x: round(float(getattr(x, 'val', x))), "len": lambda x: len(str(getattr(x, 'val', x))), "str": str
+            "pow": lambda a, b: pow(float(getattr(a, 'val', a)), float(getattr(b, 'val', b))),
+            "round": lambda x: round(float(getattr(x, 'val', x))), "len": lambda x: len(str(getattr(x, 'val', x))), "str": str,
+            "hex": lambda x: hex(int(float(getattr(x, 'val', x)))),
+            "zfill": lambda s, n: str(getattr(s, 'val', s)).zfill(int(float(getattr(n, 'val', n)))),
+            "ST": lambda s, start, end=None: str(getattr(s, 'val', s))[int(float(getattr(start, 'val', start))):int(float(getattr(end, 'val', end))) if end is not None else None],
+            "KS": lambda k: 1 if self.key_states.get(str(getattr(k, 'val', k))) else 0,
+            "MS": lambda: int((time.time() - self.start_time) * 1000),
+            "RN": lambda a, b: random.randint(int(float(getattr(a, 'val', a))), int(float(getattr(b, 'val', b)))),
+            "HC": lambda x1, y1, w1, h1, x2, y2, w2, h2: 1 if (float(getattr(x1, 'val', x1)) < float(getattr(x2, 'val', x2)) + float(getattr(w2, 'val', w2)) and float(getattr(x1, 'val', x1)) + float(getattr(w1, 'val', w1)) > float(getattr(x2, 'val', x2)) and float(getattr(y1, 'val', y1)) < float(getattr(y2, 'val', y2)) + float(getattr(h2, 'val', h2)) and float(getattr(y1, 'val', y1)) + float(getattr(h1, 'val', h1)) > float(getattr(y2, 'val', y2))) else 0,
+            "EGLValue": EGLValue
         }
 
-        literals = re.findall(r'"[^"]*"|\'[^\']*\'', s)
-        temp_s = s
-        for i, lit in enumerate(literals):
-            temp_s = temp_s.replace(lit, f"__LIT_{i}__")
+        # Extract string literals to avoid confusing the variable replacement
+        literals = []
+        def lit_repl(m):
+            literals.append(m.group(0))
+            return f"__LIT_{len(literals)-1}__"
+        processed = re.sub(r'"[^"]*"', lit_repl, s)
 
-        vars_found = re.findall(r'\$[a-zA-Z0-9_]+', temp_s)
-        processed = temp_s
+        # Safer Variable Replacement: Match $... that are NOT preceded by a character that could be part of a variable name.
+        vars_found = re.findall(r'\$[a-zA-Z0-9_]+', processed)
         for i, vname in enumerate(sorted(set(vars_found), key=len, reverse=True)):
             safe_name = f"_v{i}"
             eval_scope[safe_name] = EGLValue(all_vars.get(vname, 0))
             pattern = r'(?<![a-zA-Z0-9_])' + re.escape(vname) + r'(?![a-zA-Z0-9_])'
             processed = re.sub(pattern, safe_name, processed)
 
+        # Restore literals but wrapped in EGLValue for correct concat behavior
         for i, lit in enumerate(literals):
-            safe_lit = f"_l{i}"
-            eval_scope[safe_lit] = EGLValue(lit[1:-1])
-            processed = processed.replace(f"__LIT_{i}__", safe_lit)
+            content = lit[1:-1]
+            processed = processed.replace(f"__LIT_{i}__", f"EGLValue({repr(content)})")
 
         try:
             res = eval(processed, eval_scope)
-            return res if isinstance(res, EGLValue) else EGLValue(res)
-        except: return EGLValue(s)
+            if isinstance(res, EGLValue): return res
+            if isinstance(res, (int, float, str)): return EGLValue(res)
+            return EGLValue(res)
+        except Exception as e:
+            # If it's a simple string that didn't eval (like an unquoted color), return as is
+            if s.startswith('"') and s.endswith('"'): return EGLValue(s[1:-1])
+            return EGLValue(s)
 
     def parse_balanced(self, text, open_char, close_char):
         depth, start = 0, -1
@@ -131,11 +151,13 @@ class EGLInterpreter:
 
     def parse_args(self, args_str):
         if not args_str: return []
-        args, depth, current = [], 0, ""
+        args, depth, current, in_str = [], 0, "", False
         for char in args_str:
-            if char == '(': depth += 1
-            elif char == ')': depth -= 1
-            if (char == ',' or char == ';') and depth == 0:
+            if char == '"': in_str = not in_str
+            if not in_str:
+                if char == '(': depth += 1
+                elif char == ')': depth -= 1
+            if (char == ',' or char == ';') and depth == 0 and not in_str:
                 if current.strip(): args.append(current.strip())
                 current = ""
             else: current += char
@@ -143,13 +165,28 @@ class EGLInterpreter:
         return args
 
     def _get_rgba(self, c):
+        if isinstance(c, (int, float)):
+            idx = int(c) % 256
+            return self._get_rgba(self.palette[idx])
         cv = str(c)
         if cv == "None": return (0,0,0,0)
         if cv.startswith('#'):
             if len(cv) == 7: return tuple(int(cv[i:i+2], 16) for i in (1, 3, 5)) + (255,)
             if len(cv) == 9: return tuple(int(cv[i:i+2], 16) for i in (1, 3, 5, 7))
-        colors = {"red":(255,0,0,255), "blue":(0,0,255,255), "green":(0,255,0,255), "black":(0,0,0,255), "white":(255,255,255,255), "gray":(128,128,128,255), "lightgray":(211,211,211,255)}
-        return colors.get(cv.lower(), (0,0,0,255))
+        if cv.startswith('rgb'):
+            nums = re.findall(r'\d+', cv)
+            if len(nums) >= 3:
+                r, g, b = map(int, nums[:3])
+                a = int(nums[3]) if len(nums) > 3 else 255
+                return (r, g, b, a)
+        colors = {"red":(255,0,0,255), "blue":(0,0,255,255), "green":(0,255,0,255), "black":(0,0,0,255), "white":(255,255,255,255), "gray":(128,128,128,255), "lightgray":(211,211,211,255), "yellow":(255,255,0,255), "orange":(255,165,0,255)}
+        res = colors.get(cv.lower())
+        if res: return res
+        try:
+            from PIL import ImageColor
+            rgb = ImageColor.getrgb(cv)
+            return rgb + (255,) if len(rgb) == 3 else rgb
+        except: return (255,255,255,255)
 
     def run_cmd(self, cmd, raw_args):
         args = [self.eval_expr(a).val for a in raw_args]
@@ -163,6 +200,11 @@ class EGLInterpreter:
                 if img: img.paste(self._get_rgba(args[0]), [0, 0, img.width, img.height])
             elif cmd == 'FB':
                 if "main" in self.images and self.front_buffer: self.front_buffer.paste(self.images["main"])
+                if self.target_fps > 0: time.sleep(1.0 / self.target_fps)
+            elif cmd == 'FR':
+                self.target_fps = int(float(args[0]))
+            elif cmd == 'CP':
+                self.palette[int(float(args[0])) % 256] = args[1]
             elif cmd == 'P':
                 id = str(args[0])
                 if len(args) >= 3:
@@ -174,12 +216,11 @@ class EGLInterpreter:
                 angle, scale, alpha = (float(args[i]) if len(args) > i else d for i, d in [(3,0), (4,1.0), (5,1.0)])
                 if id in self.images and img:
                     src = self.images[id]
-                    if len(args) > 9:
-                        sx, sy, sw, sh = map(int, map(float, args[6:10])); src = src.crop((sx, sy, sx+sw, sy+sh))
+                    if len(args) > 9: sx, sy, sw, sh = map(int, map(float, args[6:10])); src = src.crop((sx, sy, sx+sw, sy+sh))
+                    if angle != 0: src = src.rotate(angle, expand=True, resample=Image.Resampling.BICUBIC)
                     if scale != 1.0:
                         nw, nh = int(src.width * scale), int(src.height * scale)
                         if nw > 0 and nh > 0: src = src.resize((nw, nh), Image.Resampling.LANCZOS)
-                    if angle != 0: src = src.rotate(angle, expand=True, resample=Image.Resampling.BICUBIC)
                     if alpha < 1.0:
                         a = src.getchannel('A').point(lambda p: p * alpha); src = src.copy(); src.putalpha(a)
                     img.paste(src, (int(dx - src.width/2), int(dy - src.height/2)), src)
@@ -197,26 +238,22 @@ class EGLInterpreter:
                                     sx = (tile_idx % ts_cols) * tw; sy = (tile_idx // ts_cols) * th
                                     img.paste(ts.crop((sx, sy, sx+tw, sy+th)), (int(c*tw - ox), int(r*th - oy)))
             elif cmd == 'HC':
-                x1, y1, w1, h1, x2, y2, w2, h2 = map(float, args[:8])
-                res = 1 if (x1 < x2 + w2 and x1 + w1 > x2 and y1 < y2 + h2 and y1 + h1 > y2) else 0
-                self.set_var("$result", res)
-            elif cmd == 'RN':
-                self.set_var("$result", random.randint(int(args[0]), int(args[1])))
-            elif cmd == 'SR':
-                random.seed(int(args[0]))
-            elif cmd == 'MS':
-                self.set_var("$result", int((time.time() - self.start_time) * 1000))
+                x1, y1, w1, h1, x2, y2, w2, h2 = map(float, args[:8]); res = 1 if (x1 < x2 + w2 and x1 + w1 > x2 and y1 < y2 + h2 and y1 + h1 > y2) else 0; self.set_var("$result", res)
+            elif cmd == 'RN': self.set_var("$result", random.randint(int(args[0]), int(args[1])))
+            elif cmd == 'SR': random.seed(int(args[0]))
+            elif cmd == 'MS': self.set_var("$result", int((time.time() - self.start_time) * 1000))
             elif cmd == 'LI':
-                try:
-                    self.images[str(args[0])] = Image.open(str(args[1])).convert("RGBA")
-                    self.draws[str(args[0])] = ImageDraw.Draw(self.images[str(args[0])])
+                try: self.images[str(args[0])] = Image.open(str(args[1])).convert("RGBA"); self.draws[str(args[0])] = ImageDraw.Draw(self.images[str(args[0])])
                 except: pass
             elif cmd == 'ST':
                 s_val = str(args[0]); start = int(args[1])
                 if len(args) > 2: self.set_var("$result", s_val[start:start+int(args[2])])
                 else: self.set_var("$result", s_val[start:])
-            elif cmd == 'DB':
-                print(f"DEBUG DUMP: Globals: {self.globals}\nArrays: {self.arrays.keys()}")
+            elif cmd == 'KS':
+                self.set_var("$result", 1 if self.key_states.get(str(args[0])) else 0)
+            elif cmd == 'KP':
+                self.key_states[str(args[0])] = int(float(args[1]))
+            elif cmd == 'DB': print(f"DEBUG DUMP: Globals: {self.globals}\nArrays: {self.arrays.keys()}")
             elif cmd == 'HZ': self.hit_zones.append((float(args[1]), float(args[2]), float(args[3]), float(args[4]), str(args[5])))
             elif cmd == 'MC': self.event_queue.append(('MC', float(args[0]), float(args[1]), float(args[2])))
             elif cmd == 'KC': self.event_queue.append(('KC', str(args[0]), str(args[1])))
@@ -246,7 +283,11 @@ class EGLInterpreter:
                         else: d.line([(0, i), (w, i)], fill=curr_c)
                     img.paste(base, (int(x), int(y)), base)
             elif cmd == 'BX':
-                x, y, w, h = map(float, args[0:4])
+                if len(args) >= 4:
+                    x, y, w, h = map(float, args[0:4])
+                else:
+                    x, y = self.pos
+                    w, h = map(float, args[0:2])
                 if draw: draw.rectangle([x, y, x+w, y+h], fill=self._get_rgba(self.fill_color), outline=self._get_rgba(self.stroke_color), width=self.stroke_width)
             elif cmd == 'AA': self.arrays[str(args[0])] = [0] * int(float(args[1]))
             elif cmd == 'AV':
@@ -258,29 +299,57 @@ class EGLInterpreter:
                 if len(args) > 1: self.stroke_width = int(float(args[1]))
             elif cmd == 'F': self.fill_color = args[0] if args[0] != "None" else None
             elif cmd == 'M': self.pos = (float(args[0]), float(args[1]))
+            elif cmd == 'R': self.pos = (self.pos[0] + float(args[0]), self.pos[1] + float(args[1]))
             elif cmd == 'L':
                 np = (float(args[0]), float(args[1]))
+                if draw: draw.line([self.pos, np], fill=self._get_rgba(self.stroke_color), width=self.stroke_width)
+                self.pos = np
+            elif cmd == 'V':
+                np = (self.pos[0] + float(args[0]), self.pos[1] + float(args[1]))
                 if draw: draw.line([self.pos, np], fill=self._get_rgba(self.stroke_color), width=self.stroke_width)
                 self.pos = np
             elif cmd == 'C':
                 if args:
                     r = float(args[0]); b = [self.pos[0]-r, self.pos[1]-r, self.pos[0]+r, self.pos[1]+r]
                     if draw: draw.ellipse(b, fill=self._get_rgba(self.fill_color), outline=self._get_rgba(self.stroke_color), width=self.stroke_width)
+            elif cmd == 'O':
+                if len(args) >= 2:
+                    rx, ry = float(args[0]), float(args[1]); b = [self.pos[0]-rx, self.pos[1]-ry, self.pos[0]+rx, self.pos[1]+ry]
+                    if draw: draw.ellipse(b, fill=self._get_rgba(self.fill_color), outline=self._get_rgba(self.stroke_color), width=self.stroke_width)
+            elif cmd == 'G':
+                if len(args) >= 4:
+                    pts = [(float(args[i]), float(args[i+1])) for i in range(0, len(args)-1, 2)]
+                    if draw:
+                        if self.fill_color and self.fill_color != "None":
+                            draw.polygon(pts, fill=self._get_rgba(self.fill_color), outline=self._get_rgba(self.stroke_color), width=self.stroke_width)
+                        else:
+                            draw.line(pts + [pts[0]], fill=self._get_rgba(self.stroke_color), width=self.stroke_width)
+            elif cmd == 'Z':
+                if len(args) >= 4:
+                    self.clip = [float(a) for a in args[0:4]]
+                    # Note: PIL doesn't have a simple global clip state for all draw calls easily,
+                    # but we can implement it by wrapping draw calls or using a layer.
+                    # For simplicity in this interpreter, we'll store it but it may not be fully applied yet.
+                else: self.clip = None
             elif cmd == 'T':
                 if draw:
                     try: f = ImageFont.load_default(); draw.text(self.pos, str(args[0]), fill=self._get_rgba(self.stroke_color), font=f)
                     except: pass
+            elif cmd == 'D': # Legacy sprite draw, map to DX
+                id, x, y = str(args[0]), float(args[1]), float(args[2])
+                self.run_cmd('DX', [id, x, y])
             elif cmd == '>':
                 if args:
-                    v = args[0]; msg = f"[EGL:VAR:{v}]" if isinstance(v, str) and v.startswith('$') else str(v)
+                    v = args[0]; msg = str(getattr(v, 'val', v))
                     self.serial_out.append(msg); print(f"SERIAL OUT: {msg}")
+                else:
+                    self.serial_out.append(""); print("SERIAL OUT: ")
             elif cmd == '<':
                 vn = str(args[0]).strip('()$ '); val = self.serial_in.pop(0) if self.serial_in else 0; self.set_var('$' + vn, val)
             elif cmd == '[': self.state_stack.append((self.pos, self.stroke_color, self.stroke_width, self.fill_color, self.active_surface, self.clip))
             elif cmd == ']':
                 if self.state_stack: self.pos, self.stroke_color, self.stroke_width, self.fill_color, self.active_surface, self.clip = self.state_stack.pop()
-        except Exception as e:
-             print(f"ERROR executing {cmd} with {args}: {e}")
+        except Exception as e: print(f"ERROR executing {cmd} with {args}: {e}")
 
     def run_code(self, code):
         i = 0
@@ -393,6 +462,7 @@ if __name__ == "__main__":
             pts = ev_s.split(',')
             if pts[0] == 'MC': it.event_queue.append(('MC', float(pts[1]), float(pts[2]), float(pts[3])))
             elif pts[0] == 'KC': it.event_queue.append(('KC', str(pts[1]), str(pts[2])))
+            elif pts[0] == 'KP': it.key_states[str(pts[1])] = int(float(pts[2]))
 
     try:
         with open(args.file, 'r') as f: code = f.read()
