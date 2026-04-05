@@ -2,6 +2,8 @@ import re
 import math
 import sys
 import argparse
+import time
+import random
 from PIL import Image, ImageDraw, ImageFont, ImageChops
 
 class EGLValue:
@@ -24,9 +26,9 @@ class EGLValue:
     def __rtruediv__(self, other): return EGLValue(getattr(other, 'val', other) / self.val)
     def __mod__(self, other): return EGLValue(self.val % getattr(other, 'val', other))
     def __rmod__(self, other): return EGLValue(getattr(other, 'val', other) % self.val)
-    def __xor__(self, other): return EGLValue(int(self.val) ^ int(getattr(other, 'val', other)))
-    def __and__(self, other): return EGLValue(int(self.val) & int(getattr(other, 'val', other)))
-    def __or__(self, other): return EGLValue(int(self.val) | int(getattr(other, 'val', other)))
+    def __xor__(self, other): return EGLValue(int(float(self.val)) ^ int(float(getattr(other, 'val', other))))
+    def __and__(self, other): return EGLValue(int(float(self.val)) & int(float(getattr(other, 'val', other))))
+    def __or__(self, other): return EGLValue(int(float(self.val)) | int(float(getattr(other, 'val', other))))
     def __lt__(self, other): return self.val < getattr(other, 'val', other)
     def __le__(self, other): return self.val <= getattr(other, 'val', other)
     def __gt__(self, other): return self.val > getattr(other, 'val', other)
@@ -61,6 +63,7 @@ class EGLInterpreter:
         self.clip = None
         self.serial_in = serial_in if serial_in else []
         self.serial_out = []
+        self.start_time = time.time()
 
     def set_var(self, name, val):
         target_val = val.val if isinstance(val, EGLValue) else val
@@ -77,7 +80,6 @@ class EGLInterpreter:
         if isinstance(expr, (int, float, EGLValue)): return EGLValue(expr)
         s = str(expr).strip()
         if not s: return EGLValue(0)
-        if (s.startswith('"') and s.endswith('"')) or (s.startswith("'") and s.endswith("'")): return EGLValue(s[1:-1])
 
         all_vars = self.globals.copy()
         for scope in self.scopes: all_vars.update(scope)
@@ -93,14 +95,23 @@ class EGLInterpreter:
             "round": lambda x: round(float(getattr(x, 'val', x))), "len": lambda x: len(str(getattr(x, 'val', x))), "str": str
         }
 
-        processed = s
-        vars_found = re.findall(r'\$[a-zA-Z0-9_]+', s)
-        for i, vname in enumerate(set(vars_found)):
-            safe_name = f"_egl_v_{i}"
-            val = all_vars.get(vname, 0)
-            eval_scope[safe_name] = EGLValue(val)
+        literals = re.findall(r'"[^"]*"|\'[^\']*\'', s)
+        temp_s = s
+        for i, lit in enumerate(literals):
+            temp_s = temp_s.replace(lit, f"__LIT_{i}__")
+
+        vars_found = re.findall(r'\$[a-zA-Z0-9_]+', temp_s)
+        processed = temp_s
+        for i, vname in enumerate(sorted(set(vars_found), key=len, reverse=True)):
+            safe_name = f"_v{i}"
+            eval_scope[safe_name] = EGLValue(all_vars.get(vname, 0))
             pattern = r'(?<![a-zA-Z0-9_])' + re.escape(vname) + r'(?![a-zA-Z0-9_])'
             processed = re.sub(pattern, safe_name, processed)
+
+        for i, lit in enumerate(literals):
+            safe_lit = f"_l{i}"
+            eval_scope[safe_lit] = EGLValue(lit[1:-1])
+            processed = processed.replace(f"__LIT_{i}__", safe_lit)
 
         try:
             res = eval(processed, eval_scope)
@@ -181,7 +192,7 @@ class EGLInterpreter:
                         for c in range(cols):
                             idx = r * cols + c
                             if idx < len(arr):
-                                tile_idx = int(float(arr[idx]))
+                                tile_idx = int(float(getattr(arr[idx], 'val', arr[idx])))
                                 if tile_idx >= 0:
                                     sx = (tile_idx % ts_cols) * tw; sy = (tile_idx // ts_cols) * th
                                     img.paste(ts.crop((sx, sy, sx+tw, sy+th)), (int(c*tw - ox), int(r*th - oy)))
@@ -189,6 +200,21 @@ class EGLInterpreter:
                 x1, y1, w1, h1, x2, y2, w2, h2 = map(float, args[:8])
                 res = 1 if (x1 < x2 + w2 and x1 + w1 > x2 and y1 < y2 + h2 and y1 + h1 > y2) else 0
                 self.set_var("$result", res)
+            elif cmd == 'RN':
+                self.set_var("$result", random.randint(int(args[0]), int(args[1])))
+            elif cmd == 'SR':
+                random.seed(int(args[0]))
+            elif cmd == 'MS':
+                self.set_var("$result", int((time.time() - self.start_time) * 1000))
+            elif cmd == 'LI':
+                try:
+                    self.images[str(args[0])] = Image.open(str(args[1])).convert("RGBA")
+                    self.draws[str(args[0])] = ImageDraw.Draw(self.images[str(args[0])])
+                except: pass
+            elif cmd == 'ST':
+                s_val = str(args[0]); start = int(args[1])
+                if len(args) > 2: self.set_var("$result", s_val[start:start+int(args[2])])
+                else: self.set_var("$result", s_val[start:])
             elif cmd == 'DB':
                 print(f"DEBUG DUMP: Globals: {self.globals}\nArrays: {self.arrays.keys()}")
             elif cmd == 'HZ': self.hit_zones.append((float(args[1]), float(args[2]), float(args[3]), float(args[4]), str(args[5])))
@@ -208,10 +234,6 @@ class EGLInterpreter:
                     elif ev[0] == 'KC':
                         esrc, ek = ev[1:]; self.set_var("$last_key", ek); self.set_var("$last_key_src", esrc)
                         if "ON_KEY" in self.functions: self.run_code(self.functions["ON_KEY"][1])
-            elif cmd == '>':
-                if args:
-                    v = args[0]; msg = f"[EGL:VAR:{v}]" if isinstance(v, str) and v.startswith('$') else str(v)
-                    self.serial_out.append(msg); print(f"SERIAL OUT: {msg}")
             elif cmd == 'SA': self.set_var("$result", 1 if self.serial_in else 0)
             elif cmd == 'B':
                 x, y, w, h = map(float, args[0:4]); c1, c2 = args[4], args[5]; dr = int(args[6]) if len(args) > 6 else 1
@@ -248,6 +270,10 @@ class EGLInterpreter:
                 if draw:
                     try: f = ImageFont.load_default(); draw.text(self.pos, str(args[0]), fill=self._get_rgba(self.stroke_color), font=f)
                     except: pass
+            elif cmd == '>':
+                if args:
+                    v = args[0]; msg = f"[EGL:VAR:{v}]" if isinstance(v, str) and v.startswith('$') else str(v)
+                    self.serial_out.append(msg); print(f"SERIAL OUT: {msg}")
             elif cmd == '<':
                 vn = str(args[0]).strip('()$ '); val = self.serial_in.pop(0) if self.serial_in else 0; self.set_var('$' + vn, val)
             elif cmd == '[': self.state_stack.append((self.pos, self.stroke_color, self.stroke_width, self.fill_color, self.active_surface, self.clip))
