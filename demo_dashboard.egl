@@ -1,0 +1,26 @@
+# EGL Sensor Dashboard
+S(400, 300, "black");
+
+# Styles
+F("#333"); K("white", 2);
+BX(0, 0, 400, 50);
+M(10, 20); T("SYSTEM DASHBOARD");
+
+# Temperature Gauge (Visual Bar)
+K("gray"); F("red");
+M(50, 100); BX(50, 100, $temp / 5, 30);
+M(50, 85); K("white"); T("Temperature: " + $temp + " C");
+
+# Pressure Gauge (Visual Bar)
+K("gray"); F("blue");
+M(50, 200); BX(50, 200, $press / 10, 30);
+M(50, 185); K("white"); T("Pressure: " + $press + " PSI");
+
+# Status
+?( $temp > 800 ) {
+    M(250, 20); K("red"); T("ALARM!");
+} : {
+    M(250, 20); K("green"); T("NORMAL");
+}
+
+FB();

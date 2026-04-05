@@ -1,0 +1,28 @@
+# EGL Interactive Menu
+S(400, 300, "white");
+
+# Callback for menu items
+:SET0() { >("SELECTED:0"); }
+:SET1() { >("SELECTED:1"); }
+:SET2() { >("SELECTED:2"); }
+
+# Header
+K("black", 2); F("gray"); BX(0, 0, 400, 40);
+M(10, 15); K("white"); T("MAIN MENU - ACTIVE: " + $sel);
+
+# Menu Items
+:draw_item($idx, $y, $label, $func) {
+    [
+        ?($sel == $idx) { F("blue"); K("white"); } : { F("lightgray"); K("black"); }
+        M(50, $y); BX(50, $y, 300, 40);
+        M(100, $y + 10); T($label);
+        HZ("item" + $idx, 50, $y, 300, 40, $func);
+    ]
+}
+
+!draw_item(0, 60, "START ENGINE", "SET0");
+!draw_item(1, 110, "STOP ENGINE", "SET1");
+!draw_item(2, 160, "SYSTEM RESET", "SET2");
+
+DE();
+FB();
