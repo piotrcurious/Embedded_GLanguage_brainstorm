@@ -1,0 +1,30 @@
+# EGL Tilemap Performance and Scrolling Test
+S(400, 300, "black");
+
+# 1. Create Tileset
+P("tiles", 32, 16);
+# Tile 0: Green Grass
+F("green"); BX(0, 0, 16, 16);
+# Tile 1: Gray Stone
+F("gray"); BX(16, 0, 16, 16); K("black"); M(20, 4); L(28, 12);
+
+# 2. Allocate and fill Map array (10x10)
+$ms = 100;
+AA("map", $ms);
+@($i, 0, 99, 1) {
+    AV("map", $i, $i % 2);
+}
+
+# 3. Render Tilemap with scrolling offset
+P("main");
+CL("black");
+
+# Draw tiled background with offset
+TM("tiles", "map", 10, 10, 16, 16, 8, 8);
+
+# Verify with a blit on top
+P("player", 16, 16); F("red"); C(6);
+P("main");
+DX("player", 100, 100);
+
+FB();

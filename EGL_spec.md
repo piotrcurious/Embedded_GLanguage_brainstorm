@@ -1,26 +1,18 @@
-# EGL (Embedded Graphics Language) Specification v1.4
+# EGL (Embedded Graphics Language) Specification v1.5
 
-EGL is a compact, stack-based graphics language designed for serial execution (SPI/I2C/UART). It is Turing-complete and optimized for interactive UI/game graphics.
+EGL is a compact, stack-based graphics language designed for high-performance serial execution. It is Turing-complete and optimized for interactive UI, demoscene effects, and tile-based games.
 
-## Control Flow & Logic
-- **Variables:** `$var = expr;`
-- **Functions:** `:name(p1, p2) { body }` - Define; `!name(a1, a2);` - Call.
-- **Conditionals:** `?(expr) { if_true } : { if_false }`
-- **Loops:** `@($var, start, end, step) { body }` (For); `WH(expr) { body }` (While).
+## Game-Centric Commands (New in v1.5)
+- `CL(color)`: **Clear**: Fill the active surface with `color`.
+- `TM(tid, aid, cols, rows, tw, th, [ox, oy])`: **Tilemap**: Render a tilemap using texture buffer `tid` and array `aid`. `cols/rows` are dimensions, `tw/th` are tile size. Optional `ox/oy` for scrolling.
+- `HC(x1, y1, w1, h1, x2, y2, w2, h2)`: **Hit Collision**: Returns 1 in `$result` if two AABB rectangles collide, 0 otherwise.
+- `DB()`: **Debug**: Dump current variable state and array names to Serial.
 
-## Interactivity & Events (New in v1.4)
-- `HZ(id, x, y, w, h, func)`: Define a clickable hit zone that triggers EGL function `func`.
-- `MC(x, y, btn)`: Inject a Mouse Click event.
-- `KC(src, key)`: Inject a Key Click event from source `src`.
-- `DE()`: **Dispatch Events**: Process injected events, check hit zones, and run callbacks.
-- **Special Functions:** `:ON_KEY` is called automatically by `DE()` for every `KC` event.
-- **Special Variables:** `$last_key` and `$last_key_src` hold the details of the most recent key event during `ON_KEY`.
-
-## Data Handling
-- `AA(id, size)`, `AV(id, idx, val)`, `AG(id, idx)`: Array management.
-- `>(expr)`: Serial Output. If `$var`, outputs `[EGL:VAR:NAME:VAL]`.
-- `<($var)`: Serial Input. Reads next value from input buffer.
-- `SA()`: **Serial Available**: Returns 1 if input buffer has data, 0 otherwise.
+## Interactivity & Events
+- `HZ(id, x, y, w, h, func)`: Define a clickable hit zone.
+- `MC(x, y, btn)`, `KC(src, key)`: Inject Mouse/Key events.
+- `DE()`: Dispatch events and trigger callbacks (e.g., `:ON_KEY`).
+- `SA()`: Check if serial input is available (returns in `$result`).
 
 ## Graphics & Rendering
 - `S(w, h, [bg])`: Initialize main surface (Double Buffered).
@@ -33,12 +25,12 @@ EGL is a compact, stack-based graphics language designed for serial execution (S
 - `Z(x, y, w, h)`: Clipping zone.
 - `[` / `]`: Push/Pop graphics state.
 
-## Built-in Math & Operators
-Full expression support including bitwise: `&`, `|`, `^`, `~`, `<<`, `>>` and math functions: `sin`, `cos`, `tan`, `sqrt`, `abs`, `min`, `max`, `int`, `float`, `pow`, `round`, `len`.
+## Control Flow & Logic
+- **Variables:** `$var = expr;` (Global/Local scoping).
+- **Functions:** `:name(p1, p2) { body }` / `!name(a1, a2);`.
+- **Arrays:** `AA(id, size)`, `AV(id, idx, val)`, `AG(id, idx)`.
+- **Loops:** `@($v, s, e, step) { body }` (For); `WH(expr) { body }` (While).
+- **Conditionals:** `?(expr) { t } : { f }`.
 
-## Double Buffering & Events Workflow
-Interactive EGL scripts typically follow a loop:
-1. `DE()` - Process any input events from the host.
-2. Update game/UI logic based on variables and callbacks.
-3. Draw current state to back-buffer.
-4. `VS()` and `FB()` to update the display.
+## Syntax & Errors
+EGL v1.5 includes line-context error reporting. Every command must end with a semicolon `;` or newline. Comments start with `#`.
