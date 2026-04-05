@@ -1,0 +1,24 @@
+# Palette Cycle Demo
+S(256, 128, 0)
+# Initialize palette with shades of blue using hex and zfill
+@($i, 0, 255, 1) {
+  # hex($i) returns '0xN' or '0xNN'
+  $h = ST(hex($i), 2)
+  $padded = zfill($h, 2)
+  $c = "#0000" + $padded
+  CP($i, $c)
+}
+
+# Draw 256 vertical lines using the palette
+@($x, 0, 255, 1) {
+  K($x, 1)
+  M($x, 0)
+  L($x, 128)
+}
+
+# Redefine some palette entries to see the change
+CP(10, "red")
+CP(128, "green")
+CP(240, "white")
+
+FB()

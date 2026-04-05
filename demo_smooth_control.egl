@@ -1,0 +1,38 @@
+# Smooth Control Demo
+S(200, 200, "gray")
+FR(60) # 60 FPS
+
+# Player position
+$px = 100
+$py = 100
+
+:UPDATE() {
+  # Poll key states
+  ? (KS("up")) { $py = $py - 2 }
+  ? (KS("down")) { $py = $py + 2 }
+  ? (KS("left")) { $px = $px - 2 }
+  ? (KS("right")) { $px = $px + 2 }
+
+  CL("gray")
+  F("blue")
+  K("white", 2)
+  M($px, $py)
+  C(10)
+
+  # Display position
+  M(5, 15)
+  K("black")
+  T("Pos: " + int($px) + "," + int($py))
+}
+
+# Simulate multiple frames
+KP("right", 1)
+KP("down", 1)
+
+@($f, 1, 10, 1) {
+  !UPDATE()
+  FB()
+}
+
+KP("right", 0)
+KP("down", 0)

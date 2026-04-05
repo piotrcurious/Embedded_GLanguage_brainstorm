@@ -1,0 +1,153 @@
+# Comprehensive EGL v1.7 Test Suite
+S(400, 400, "black")
+FR(0) # No frame rate limiting for tests
+
+# -- SECTION 1: MATH & LOGIC --
+$pass_count = 0
+$fail_count = 0
+
+:ASSERT(cond, msg) {
+  ?(cond) {
+    $pass_count = $pass_count + 1
+    >("[PASS] " + msg)
+  } : {
+    $fail_count = $fail_count + 1
+    >("[FAIL] " + msg)
+  }
+}
+
+:ON_KEY() {
+  !ASSERT($last_key == "space", "ON_KEY callback triggered with correct key")
+}
+
+:CLICKED() {
+  !ASSERT($last_click_x == 200, "Hit zone callback triggered with correct X")
+}
+
+!ASSERT(1 + 1 == 2, "Basic arithmetic");
+!ASSERT(int(10.5) == 10, "int() function");
+!ASSERT(sqrt(16) == 4, "sqrt() function");
+!ASSERT(abs(-5) == 5, "abs() function");
+!ASSERT(min(10, 20) == 10, "min() function");
+!ASSERT(max(10, 20) == 20, "max() function");
+!ASSERT(pow(2, 3) == 8, "pow() function");
+!ASSERT(round(4.6) == 5, "round() function");
+!ASSERT(len("hello") == 5, "len() function");
+!ASSERT(10 ^ 3 == 9, "Bitwise XOR");
+!ASSERT(10 & 7 == 2, "Bitwise AND");
+!ASSERT(10 | 1 == 11, "Bitwise OR");
+
+# -- SECTION 2: STRINGS --
+!ASSERT("Hello " + "World" == "Hello World", "String concatenation");
+!ASSERT("Val: " + 10 == "Val: 10.0", "String + Number concat");
+ST("ABCDE", 1, 2)
+!ASSERT($result == "BC", "ST() command (Legacy)");
+!ASSERT(ST("ABCDE", 1, 3) == "BCD", "ST() built-in function");
+!ASSERT(zfill("5", 3) == "005", "zfill() function");
+!ASSERT(hex(255) == "0xff", "hex() function");
+
+# -- SECTION 3: ARRAYS --
+AA("test_arr", 5)
+AV("test_arr", 0, 100)
+AV("test_arr", 1, 200)
+AG("test_arr", 0)
+!ASSERT($result == 100, "Array set/get index 0");
+AG("test_arr", 1)
+!ASSERT($result == 200, "Array set/get index 1");
+
+# -- SECTION 4: COLLISION --
+HC(0, 0, 10, 10, 5, 5, 10, 10)
+!ASSERT($result == 1, "HC collision positive");
+HC(0, 0, 10, 10, 20, 20, 10, 10)
+!ASSERT($result == 0, "HC collision negative");
+!ASSERT(HC(0,0,10,10, 5,5,10,10) == 1, "HC built-in function positive");
+
+# -- SECTION 5: INPUT STATE --
+KP("up", 1)
+!ASSERT(KS("up") == 1, "KP/KS positive state")
+KP("up", 0)
+!ASSERT(KS("up") == 0, "KP/KS negative state")
+
+# -- SECTION 6: NESTED LOGIC & LOOPS --
+$sum = 0
+@($i, 1, 5, 1) {
+  $sum = $sum + $i
+}
+!ASSERT($sum == 15, "For loop summation")
+
+$count = 0
+WH($count < 3) {
+  $count = $count + 1
+}
+!ASSERT($count == 3, "While loop counter")
+
+# -- SECTION 7: GRAPHICS PRIMITIVES (Visual Check) --
+# Primitives Verification
+M(200, 300); F("yellow"); O(40, 20); !ASSERT(1, "O(rx, ry) called")
+F("None"); K("white", 2); G(300, 300, 350, 320, 320, 350); !ASSERT(1, "G(...) polygon called")
+M(100, 300); K("red", 3); V(20, 20); !ASSERT(1, "V(dx, dy) called")
+
+# Background
+CL("gray")
+
+# Palette test
+CP(1, "red")
+CP(2, "blue")
+CP(3, "green")
+
+# Rectangles & Fills
+F(1); K("black", 2); M(10, 10); BX(50, 50)
+F(2); K("white", 1); M(70, 10); BX(50, 50)
+
+# Lines & Style
+K(3, 5); M(10, 80); L(110, 80)
+K("yellow", 2); M(10, 90); L(110, 90)
+
+# Circles
+F("None"); K("red", 2); M(40, 150); C(30)
+F("blue"); K("black", 1); M(100, 150); C(20)
+
+# Relative move & Text
+M(10, 200); K("black"); T("Start"); R(40, 0); T("Offset"); R(0, 20); T("Down");
+
+# Advanced blit
+LI("dog", "dog.png")
+DX("dog", 300, 100, 45, 0.5, 0.8)
+
+# Gradient
+B(10, 250, 150, 50, "red", "blue", 0)
+B(180, 250, 150, 50, "green", "yellow", 1)
+
+# Tilemap
+AA("map", 4)
+AV("map", 0, 0); AV("map", 1, 1); AV("map", 2, 2); AV("map", 3, 3)
+# Assume dog.png can be treated as a tileset for testing
+TM("dog", "map", 2, 2, 32, 32, 0, 0)
+
+# -- SECTION 8: SYSTEM & UTILITY --
+RN(1, 10)
+!ASSERT($result >= 1, "RN min bound");
+!ASSERT($result <= 10, "RN max bound");
+MS()
+$t1 = $result
+@($i, 1, 100, 1) { $x = 1 } # Small delay
+MS()
+!ASSERT($result >= $t1, "MS() monotonic increase");
+
+# -- SECTION 9: EVENTS & CALLBACKS --
+KC("test_src", "space")
+HZ("btn", 150, 150, 100, 100, "CLICKED")
+MC(200, 200, 1)
+DE()
+
+# -- FINAL SUMMARY --
+M(10, 350)
+K("blue")
+T("Tests Passed: " + $pass_count)
+M(10, 370)
+K("red")
+T("Tests Failed: " + $fail_count)
+
+>("[SUMMARY] Passed: " + $pass_count + ", Failed: " + $fail_count)
+
+FB()
