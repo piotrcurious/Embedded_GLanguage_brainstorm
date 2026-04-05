@@ -1,12 +1,16 @@
 import re
 import math
 import sys
-from PIL import Image, ImageDraw, ImageFont
+import argparse
+from PIL import Image, ImageDraw, ImageFont, ImageChops
 
 class EGLInterpreter:
-    def __init__(self):
+    def __init__(self, initial_vars=None):
         self.globals = {"$pi": math.pi, "$e": math.e}
-        self.scopes = [] # Stack of dicts for truly local vars
+        if initial_vars:
+            for k, v in initial_vars.items():
+                self.globals[k if k.startswith('$') else '$'+k] = v
+        self.scopes = []
         self.functions = {}
         self.state_stack = []
         self.images = {"main": None}
@@ -16,11 +20,9 @@ class EGLInterpreter:
         self.stroke_color = "black"
         self.stroke_width = 1
         self.fill_color = None
+        self.clip = None
 
     def set_var(self, name, val):
-        # We'll treat all variables starting with $ as global unless we're in a function
-        # But for robust recursion, if we're in a function, EVERYTHING is local unless it's a known global.
-        # Actually, let's keep it simple: if there are scopes, it's local.
         if self.scopes: self.scopes[-1][name] = val
         else: self.globals[name] = val
 
@@ -35,7 +37,6 @@ class EGLInterpreter:
         if not s: return 0
         if (s.startswith('"') and s.endswith('"')) or (s.startswith("'") and s.endswith("'")): return s[1:-1]
 
-        # Collect all accessible variables
         all_vars = self.globals.copy()
         for scope in self.scopes: all_vars.update(scope)
 
@@ -84,19 +85,75 @@ class EGLInterpreter:
         if current.strip(): args.append(self.eval_expr(current.strip()))
         return args
 
+    def _get_rgba(self, c):
+        if c is None or c == "None": return (0,0,0,0)
+        if isinstance(c, tuple): return c
+        if isinstance(c, str):
+            if c.startswith('#'):
+                if len(c) == 7: return tuple(int(c[i:i+2], 16) for i in (1, 3, 5)) + (255,)
+                if len(c) == 9: return tuple(int(c[i:i+2], 16) for i in (1, 3, 5, 7))
+            colors = {"red":(255,0,0,255), "blue":(0,0,255,255), "green":(0,255,0,255), "black":(0,0,0,255), "white":(255,255,255,255), "gray":(128,128,128,255), "lightgray":(211,211,211,255)}
+            return colors.get(c.lower(), (0,0,0,255))
+        return (0,0,0,255)
+
     def run_cmd(self, cmd, args):
-        draw = self.draws.get(self.active_surface)
+        surface_id = self.active_surface
+        draw = self.draws.get(surface_id)
+        img = self.images.get(surface_id)
+
         try:
             if cmd == 'S':
                 w, h = int(float(args[0])), int(float(args[1]))
                 bg = args[2] if len(args) > 2 else "white"
-                self.images["main"] = Image.new("RGBA", (w, h), bg); self.draws["main"] = ImageDraw.Draw(self.images["main"]); self.active_surface = "main"
+                self.images["main"] = Image.new("RGBA", (w, h), self._get_rgba(bg)); self.draws["main"] = ImageDraw.Draw(self.images["main"]); self.active_surface = "main"; self.clip = None
             elif cmd == 'P':
-                id, w, h = str(args[0]), int(float(args[1])), int(float(args[2]))
-                self.images[id] = Image.new("RGBA", (w, h), (0,0,0,0)); self.draws[id] = ImageDraw.Draw(self.images[id]); self.active_surface = id
+                id = str(args[0])
+                if len(args) >= 3:
+                    w, h = int(float(args[1])), int(float(args[2]))
+                    self.images[id] = Image.new("RGBA", (w, h), (0,0,0,0)); self.draws[id] = ImageDraw.Draw(self.images[id])
+                self.active_surface = id; self.clip = None
             elif cmd == 'D':
                 id, x, y = str(args[0]), float(args[1]), float(args[2])
-                if id in self.images and self.images[self.active_surface]: self.images[self.active_surface].paste(self.images[id], (int(x), int(y)), self.images[id])
+                if id in self.images and img:
+                    src = self.images[id]
+                    img.paste(src, (int(x), int(y)), src)
+            elif cmd == 'DX': # DX(id, x, y, angle, scale, alpha, sx, sy, sw, sh)
+                id, dx, dy = str(args[0]), float(args[1]), float(args[2])
+                angle = float(args[3]) if len(args) > 3 else 0
+                scale = float(args[4]) if len(args) > 4 else 1.0
+                alpha = float(args[5]) if len(args) > 5 else 1.0
+                if id in self.images and img:
+                    src = self.images[id]
+                    if len(args) > 9:
+                        sx, sy, sw, sh = map(int, map(float, args[6:10]))
+                        src = src.crop((sx, sy, sx+sw, sy+sh))
+                    if scale != 1.0:
+                        nw, nh = int(src.width * scale), int(src.height * scale)
+                        if nw > 0 and nh > 0: src = src.resize((nw, nh), Image.Resampling.LANCZOS)
+                    if angle != 0:
+                        src = src.rotate(angle, expand=True, resample=Image.Resampling.BICUBIC)
+                    if alpha < 1.0:
+                        a = src.getchannel('A').point(lambda p: p * alpha)
+                        src = src.copy(); src.putalpha(a)
+                    img.paste(src, (int(dx - src.width/2), int(dy - src.height/2)), src)
+            elif cmd == 'B': # B(x, y, w, h, c1, c2, dir)
+                x, y, w, h = map(float, args[0:4])
+                c1, c2 = args[4], args[5]
+                dir = int(args[6]) if len(args) > 6 else 1
+                if img:
+                    base = Image.new('RGBA', (int(w), int(h)), (0,0,0,0))
+                    d = ImageDraw.Draw(base)
+                    rgb1, rgb2 = self._get_rgba(c1), self._get_rgba(c2)
+                    steps = int(w if dir == 0 else h)
+                    for i in range(steps):
+                        ratio = i / max(1, steps-1)
+                        curr_c = tuple(int(rgb1[j] + (rgb2[j] - rgb1[j]) * ratio) for j in range(4))
+                        if dir == 0: d.line([(i, 0), (i, h)], fill=curr_c)
+                        else: d.line([(0, i), (w, i)], fill=curr_c)
+                    img.paste(base, (int(x), int(y)), base)
+            elif cmd == 'Z':
+                if len(args) >= 4: self.clip = (float(args[0]), float(args[1]), float(args[2]), float(args[3]))
+                else: self.clip = None
             elif cmd == 'K':
                 self.stroke_color = args[0]
                 if len(args) > 1: self.stroke_width = int(float(args[1]))
@@ -105,26 +162,26 @@ class EGLInterpreter:
             elif cmd == 'R' and len(args) >= 2: self.pos = (self.pos[0] + float(args[0]), self.pos[1] + float(args[1]))
             elif cmd == 'L' and len(args) >= 2:
                 np = (float(args[0]), float(args[1]))
-                if draw: draw.line([self.pos, np], fill=self.stroke_color, width=self.stroke_width)
+                if draw: draw.line([self.pos, np], fill=self._get_rgba(self.stroke_color), width=self.stroke_width)
                 self.pos = np
             elif cmd == 'V' and len(args) >= 2:
                 np = (self.pos[0] + float(args[0]), self.pos[1] + float(args[1]))
-                if draw: draw.line([self.pos, np], fill=self.stroke_color, width=self.stroke_width)
+                if draw: draw.line([self.pos, np], fill=self._get_rgba(self.stroke_color), width=self.stroke_width)
                 self.pos = np
             elif cmd == 'C' and len(args) >= 1:
                 r = float(args[0]); box = [self.pos[0]-r, self.pos[1]-r, self.pos[0]+r, self.pos[1]+r]
-                if draw: draw.ellipse(box, fill=self.fill_color, outline=self.stroke_color, width=self.stroke_width)
+                if draw: draw.ellipse(box, fill=self._get_rgba(self.fill_color), outline=self._get_rgba(self.stroke_color), width=self.stroke_width)
             elif cmd == 'O' and len(args) >= 2:
                 rx, ry = float(args[0]), float(args[1]); box = [self.pos[0]-rx, self.pos[1]-ry, self.pos[0]+rx, self.pos[1]+ry]
-                if draw: draw.ellipse(box, fill=self.fill_color, outline=self.stroke_color, width=self.stroke_width)
+                if draw: draw.ellipse(box, fill=self._get_rgba(self.fill_color), outline=self._get_rgba(self.stroke_color), width=self.stroke_width)
             elif cmd == 'G' and len(args) >= 4:
                 pts = [(float(args[i]), float(args[i+1])) for i in range(0, len(args), 2)]
-                if draw: draw.polygon(pts, fill=self.fill_color, outline=self.stroke_color)
+                if draw: draw.polygon(pts, fill=self._get_rgba(self.fill_color), outline=self._get_rgba(self.stroke_color))
             elif cmd == 'T' and len(args) >= 1:
                 if draw:
                     try: f = ImageFont.load_default()
                     except: f = None
-                    draw.text(self.pos, str(args[0]), fill=self.stroke_color, font=f)
+                    draw.text(self.pos, str(args[0]), fill=self._get_rgba(self.stroke_color), font=f)
             elif cmd == 'W' and len(args) >= 6:
                 id, x, y, w, h, title = args
                 if draw:
@@ -140,14 +197,16 @@ class EGLInterpreter:
             elif cmd == 'UX' and len(args) >= 4:
                 id, label, x, y = args[:4]
                 if draw:
-                    try: f = ImageFont.load_default(); draw.text((float(x), float(y)), str(label), fill=self.stroke_color, font=f)
+                    try: f = ImageFont.load_default(); draw.text((float(x), float(y)), str(label), fill=self._get_rgba(self.stroke_color), font=f)
                     except: pass
             elif cmd == '>': print(f"SERIAL OUT: {args[0]}")
             elif cmd == '*': print(f"REMOTE CALL: {args[0]}({args[1:]})")
-            elif cmd == '[': self.state_stack.append((self.pos, self.stroke_color, self.stroke_width, self.fill_color, self.active_surface))
+            elif cmd == '[': self.state_stack.append((self.pos, self.stroke_color, self.stroke_width, self.fill_color, self.active_surface, self.clip))
             elif cmd == ']':
-                if self.state_stack: self.pos, self.stroke_color, self.stroke_width, self.fill_color, self.active_surface = self.state_stack.pop()
-        except Exception as e: pass
+                if self.state_stack: self.pos, self.stroke_color, self.stroke_width, self.fill_color, self.active_surface, self.clip = self.state_stack.pop()
+        except Exception as e:
+            # print(f"Error executing {cmd}: {e}")
+            pass
 
     def run_code(self, code):
         i = 0
@@ -204,11 +263,10 @@ class EGLInterpreter:
                         params, body = self.functions[name]; vals = self.parse_args(args_r)
                         self.scopes.append({p: v for p, v in zip(params, vals)})
                         self.run_code(body)
-                        # Pop scope and handle $result propagation
                         local = self.scopes.pop()
                         if "$result" in local: self.set_var("$result", local["$result"])
                     continue
-            m = re.match(r'([A-Z\[\]><\*])', code[i:])
+            m = re.match(r'([A-Z]{1,2})', code[i:])
             if m:
                 cmd = m.group(1); i += m.end(); args_r = ""
                 if i < len(code) and code[i] == '(':
@@ -217,11 +275,32 @@ class EGLInterpreter:
                     vn = args_r.strip('()$ '); self.set_var('$' + vn if not vn.startswith('$') else vn, 42)
                 else: self.run_cmd(cmd, self.parse_args(args_r))
                 continue
+            if code[i] in ['[', ']', '>', '<', '*']:
+                cmd = code[i]; i += 1; args_r = ""
+                if i < len(code) and code[i] == '(':
+                    args_r, rest = self.parse_balanced(code[i:], '(', ')'); i = len(code) - len(rest)
+                self.run_cmd(cmd, self.parse_args(args_r))
+                continue
             i += 1
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        with open(sys.argv[1], 'r') as f: code = f.read()
-        it = EGLInterpreter(); it.run_code(code)
-        if it.images["main"]: it.images["main"].save("output.png")
-        print("Done.")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("file", help="EGL script file")
+    parser.add_argument("--vars", help="Initial variables in key=val,key2=val2 format")
+    parser.add_argument("--output", default="output.png", help="Output PNG file")
+    args = parser.parse_args()
+
+    init_vars = {}
+    if args.vars:
+        for item in args.vars.split(','):
+            k, v = item.split('=')
+            try: init_vars[k] = float(v)
+            except: init_vars[k] = v
+
+    with open(args.file, 'r') as f: code = f.read()
+    it = EGLInterpreter(initial_vars=init_vars)
+    it.run_code(code)
+    if it.images["main"]:
+        it.images["main"].save(args.output)
+        print(f"Saved to {args.output}")
+    print("Done.")

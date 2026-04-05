@@ -1,0 +1,42 @@
+# Demoscene-style demo: "EGL Copper & Tiled"
+S(800, 600, "black");
+
+# Tiled Starfield (using sprites/P and blitting/DX)
+P("star", 16, 16);
+F("white"); C(4); # Tiny star
+
+# Blit stars with alpha and scaling variation
+P("main");
+@($i, 0, 100, 1) {
+    $sx = (12345 * $i) % 800;
+    $sy = (67890 * $i) % 600;
+    $sz = 0.5 + (($i % 10) / 10);
+    $al = 0.2 + (($i % 5) / 5);
+    DX("star", $sx, $sy, 0, $sz, $al);
+}
+
+# Copper Bars (animated background/UI)
+@($y, 0, 100, 20) {
+    B(0, 100 + $y, 800, 20, "#FF0000", "#0000FF", 1);
+}
+
+# Floating/Rotating "EGL" Logo (using sprite/DX)
+P("logo", 100, 40);
+F("#00FF00"); K("white", 2);
+G(0,0, 100,0, 100,40, 0,40);
+K("black"); M(25, 10); T("EGL DEMO");
+
+P("main");
+@($t, 0, 6, 1) {
+    $lx = 400 + 200 * sin($t);
+    $ly = 300 + 100 * cos($t);
+    $ang = $t * 60;
+    DX("logo", $lx, $ly, $ang, 2.0, 0.8);
+}
+
+# Clipping Test (Viewport for sub-UI)
+Z(100, 450, 600, 100);
+F("#333"); B(100, 450, 600, 100, "#333", "#000", 1);
+K("white"); M(120, 470); T("CLIPPED STATUS WINDOW");
+M(120, 490); T("ONLY THIS REGION RENDERS");
+Z(); # Reset clip
