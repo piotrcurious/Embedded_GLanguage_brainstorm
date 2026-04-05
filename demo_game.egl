@@ -1,0 +1,16 @@
+# EGL Simple Game Demo
+S(400, 300, "black");
+
+# Render background grid
+K("#111", 1);
+@($i, 0, 400, 40) { M($i, 0); L($i, 300); }
+@($j, 0, 300, 40) { M(0, $j); L(400, $j); }
+
+# Draw player sprite at host-controlled position
+DX("player", $px, $py);
+
+# UI Overlay
+F("white"); K("black"); M(10, 10); T("USE WASD TO MOVE");
+M(10, 25); T("POS: " + $px + ", " + $py);
+
+FB();

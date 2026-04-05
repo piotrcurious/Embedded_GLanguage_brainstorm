@@ -1,0 +1,18 @@
+# EGL Error Handling Test
+S(400, 300, "white");
+
+# Correct code
+M(10, 10); T("Starting error test...");
+
+# 1. Undefined variable in expr (should handle safely)
+$x = $undefined + 10;
+M(10, 30); T("X is " + $x);
+
+# 2. Syntax error (missing closing brace)
+# :FUNC() {  T("No brace");
+
+# 3. Invalid command
+BAD_CMD(1, 2, 3);
+
+M(10, 50); T("Test Finished.");
+FB();

@@ -1,0 +1,47 @@
+# EGL v1.6 Starfield Scroller Demo
+# Demonstrates: Random (RN), Millis (MS), Tilemap (TM), and advanced blits (DX).
+
+S(400, 300, "black");
+
+# 1. Setup Background (Tilemap)
+P("tiles", 32, 16);
+F("#111"); BX(0, 0, 16, 16); # Tile 0: Space
+F("#222"); BX(16, 0, 16, 16); K("white"); M(20, 8); C(1); # Tile 1: Distant star
+
+AA("bg_map", 400); # 20x20 map
+SR(42); # Deterministic background
+@($i, 0, 399, 1) {
+    RN(0, 10); # 1 in 10 chance for star tile
+    ?($result > 8) { AV("bg_map", $i, 1); } : { AV("bg_map", $i, 0); }
+}
+
+# 2. Setup Sprites
+P("ship", 24, 16);
+F("gray"); G(0, 4, 20, 8, 0, 12); # Rocket shape
+F("red"); BX(0, 7, 4, 2); # Flame
+
+# 3. Main Loop Logic (Simulated for 1 frame at t=500ms)
+P("main");
+MS(); $now = $result;
+$scroll_x = ($now / 50) % 16; # Horizontal scroll
+
+# Clear and Render BG
+CL("black");
+TM("tiles", "bg_map", 20, 20, 16, 16, $scroll_x, 0);
+
+# Render foreground particles (RN)
+@($k, 0, 10, 1) {
+   RN(0, 400); $px = $result;
+   RN(0, 300); $py = $result;
+   F("white"); M($px, $py); C(1);
+}
+
+# Render Player Ship
+DX("ship", 50, 150, 0, 2.0, 1.0);
+
+# UI Output
+K("white"); M(10, 10); T("TIME: " + $now + "ms");
+ST("SCROLLING SPACE", 0, 9);
+M(10, 25); T($result);
+
+FB();
