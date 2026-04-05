@@ -1,0 +1,40 @@
+# Bubble Sort in EGL v1.2
+# Demonstrates Array Allocation (AA), Array Get (AG), Array Set (AV), and While Loops (WH).
+
+$size = 6;
+AA("my_arr", $size);
+AV("my_arr", 0, 42);
+AV("my_arr", 1, 13);
+AV("my_arr", 2, 7);
+AV("my_arr", 3, 99);
+AV("my_arr", 4, 1);
+AV("my_arr", 5, 23);
+
+# Bubble Sort Logic
+$swapped = 1;
+WH($swapped == 1) {
+    $swapped = 0;
+    $i = 0;
+    WH($i < ($size - 1)) {
+        AG("my_arr", $i);
+        $v1 = $result;
+        $j = $i + 1;
+        AG("my_arr", $j);
+        $v2 = $result;
+
+        ?($v1 > $v2) {
+            AV("my_arr", $i, $v2);
+            AV("my_arr", $j, $v1);
+            $swapped = 1;
+        }
+        $i = $i + 1;
+    }
+}
+
+# Output sorted array to serial
+$k = 0;
+WH($k < $size) {
+    AG("my_arr", $k);
+    >($result);
+    $k = $k + 1;
+}

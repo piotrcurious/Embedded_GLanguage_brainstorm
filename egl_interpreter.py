@@ -2,16 +2,18 @@ import re
 import math
 import sys
 import argparse
+import json
 from PIL import Image, ImageDraw, ImageFont, ImageChops
 
 class EGLInterpreter:
-    def __init__(self, initial_vars=None):
+    def __init__(self, initial_vars=None, serial_in=None):
         self.globals = {"$pi": math.pi, "$e": math.e}
         if initial_vars:
             for k, v in initial_vars.items():
                 self.globals[k if k.startswith('$') else '$'+k] = v
         self.scopes = []
         self.functions = {}
+        self.arrays = {}
         self.state_stack = []
         self.images = {"main": None}
         self.draws = {"main": None}
@@ -21,6 +23,8 @@ class EGLInterpreter:
         self.stroke_width = 1
         self.fill_color = None
         self.clip = None
+        self.serial_in = serial_in if serial_in else []
+        self.serial_out = []
 
     def set_var(self, name, val):
         if self.scopes: self.scopes[-1][name] = val
@@ -56,8 +60,10 @@ class EGLInterpreter:
             except: pass
 
         try:
+            # Add bitwise and more math to scope
             scope = {"__builtins__": None, "math": math, "cos": lambda x: math.cos(float(x)), "sin": lambda x: math.sin(float(x)),
-                     "tan": lambda x: math.tan(float(x)), "sqrt": lambda x: math.sqrt(float(x)), "abs": abs, "min": min, "max": max, "pi": math.pi}
+                     "tan": lambda x: math.tan(float(x)), "sqrt": lambda x: math.sqrt(float(x)), "abs": abs, "min": min, "max": max, "pi": math.pi,
+                     "int": int, "float": float, "pow": pow, "round": round}
             return eval(processed, scope)
         except: return s
 
@@ -117,7 +123,7 @@ class EGLInterpreter:
                 if id in self.images and img:
                     src = self.images[id]
                     img.paste(src, (int(x), int(y)), src)
-            elif cmd == 'DX': # DX(id, x, y, angle, scale, alpha, sx, sy, sw, sh)
+            elif cmd == 'DX':
                 id, dx, dy = str(args[0]), float(args[1]), float(args[2])
                 angle = float(args[3]) if len(args) > 3 else 0
                 scale = float(args[4]) if len(args) > 4 else 1.0
@@ -136,7 +142,7 @@ class EGLInterpreter:
                         a = src.getchannel('A').point(lambda p: p * alpha)
                         src = src.copy(); src.putalpha(a)
                     img.paste(src, (int(dx - src.width/2), int(dy - src.height/2)), src)
-            elif cmd == 'B': # B(x, y, w, h, c1, c2, dir)
+            elif cmd == 'B':
                 x, y, w, h = map(float, args[0:4])
                 c1, c2 = args[4], args[5]
                 dir = int(args[6]) if len(args) > 6 else 1
@@ -151,9 +157,21 @@ class EGLInterpreter:
                         if dir == 0: d.line([(i, 0), (i, h)], fill=curr_c)
                         else: d.line([(0, i), (w, i)], fill=curr_c)
                     img.paste(base, (int(x), int(y)), base)
+            elif cmd == 'BX': # BX(x, y, w, h) - Fill Rect at current style
+                x, y, w, h = map(float, args[0:4])
+                if draw: draw.rectangle([x, y, x+w, y+h], fill=self._get_rgba(self.fill_color), outline=self._get_rgba(self.stroke_color), width=self.stroke_width)
             elif cmd == 'Z':
                 if len(args) >= 4: self.clip = (float(args[0]), float(args[1]), float(args[2]), float(args[3]))
                 else: self.clip = None
+            elif cmd == 'AA': # AA(id, size) - Array Allocate
+                id, sz = str(args[0]), int(float(args[1]))
+                self.arrays[id] = [0] * sz
+            elif cmd == 'AV': # AV(id, idx, val) - Array Set
+                id, idx, val = str(args[0]), int(float(args[1])), args[2]
+                if id in self.arrays: self.arrays[id][idx] = val
+            elif cmd == 'AG': # AG(id, idx) -> $result - Array Get
+                id, idx = str(args[0]), int(float(args[1]))
+                if id in self.arrays: self.set_var("$result", self.arrays[id][idx])
             elif cmd == 'K':
                 self.stroke_color = args[0]
                 if len(args) > 1: self.stroke_width = int(float(args[1]))
@@ -182,7 +200,7 @@ class EGLInterpreter:
                     try: f = ImageFont.load_default()
                     except: f = None
                     draw.text(self.pos, str(args[0]), fill=self._get_rgba(self.stroke_color), font=f)
-            elif cmd == 'W' and len(args) >= 6:
+            elif cmd == 'WN' and len(args) >= 6: # Renamed from W to WN
                 id, x, y, w, h, title = args
                 if draw:
                     draw.rectangle([float(x), float(y), float(x+w), float(y+h)], outline="gray", width=2); draw.rectangle([float(x), float(y), float(x+w), float(y+20)], fill="gray")
@@ -199,14 +217,19 @@ class EGLInterpreter:
                 if draw:
                     try: f = ImageFont.load_default(); draw.text((float(x), float(y)), str(label), fill=self._get_rgba(self.stroke_color), font=f)
                     except: pass
-            elif cmd == '>': print(f"SERIAL OUT: {args[0]}")
+            elif cmd == '>':
+                v = args[0]
+                msg = f"[EGL:VAR:{v}]" if isinstance(v, str) and v.startswith('$') else str(v)
+                self.serial_out.append(msg); print(f"SERIAL OUT: {msg}")
+            elif cmd == '<': # <($var) - Serial In
+                vn = str(args[0]).strip('()$ ')
+                val = self.serial_in.pop(0) if self.serial_in else 0
+                self.set_var('$' + vn, val)
             elif cmd == '*': print(f"REMOTE CALL: {args[0]}({args[1:]})")
             elif cmd == '[': self.state_stack.append((self.pos, self.stroke_color, self.stroke_width, self.fill_color, self.active_surface, self.clip))
             elif cmd == ']':
                 if self.state_stack: self.pos, self.stroke_color, self.stroke_width, self.fill_color, self.active_surface, self.clip = self.state_stack.pop()
-        except Exception as e:
-            # print(f"Error executing {cmd}: {e}")
-            pass
+        except Exception as e: pass
 
     def run_code(self, code):
         i = 0
@@ -245,6 +268,13 @@ class EGLInterpreter:
                         if not eval_res: self.run_code(eb)
                         next_i = len(code) - len(rest2)
                 i = next_i; continue
+            if code[i] == 'W' and i+1 < len(code) and code[i+1] == 'H': # WH Loop
+                i += 2; cond_s, rest = self.parse_balanced(code[i:], '(', ')'); i = len(code) - len(rest)
+                while i < len(code) and code[i] != '{': i += 1
+                body, rest = self.parse_balanced(code[i:], '{', '}'); next_i = len(code) - len(rest)
+                while self.eval_expr(cond_s):
+                    self.run_code(body)
+                i = next_i; continue
             if code[i] == '@':
                 i += 1; args_s, rest = self.parse_balanced(code[i:], '(', ')')
                 pts = args_s.split(','); vn = pts[0].strip(); start, end, step = self.eval_expr(pts[1]), self.eval_expr(pts[2]), self.eval_expr(pts[3])
@@ -272,7 +302,7 @@ class EGLInterpreter:
                 if i < len(code) and code[i] == '(':
                     args_r, rest = self.parse_balanced(code[i:], '(', ')'); i = len(code) - len(rest)
                 if cmd == '<':
-                    vn = args_r.strip('()$ '); self.set_var('$' + vn if not vn.startswith('$') else vn, 42)
+                    self.run_cmd('<', [args_r.strip('()$ ')])
                 else: self.run_cmd(cmd, self.parse_args(args_r))
                 continue
             if code[i] in ['[', ']', '>', '<', '*']:
@@ -287,6 +317,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("file", help="EGL script file")
     parser.add_argument("--vars", help="Initial variables in key=val,key2=val2 format")
+    parser.add_argument("--serial-in", help="Serial input data (comma-separated list of values)")
     parser.add_argument("--output", default="output.png", help="Output PNG file")
     args = parser.parse_args()
 
@@ -297,8 +328,14 @@ if __name__ == "__main__":
             try: init_vars[k] = float(v)
             except: init_vars[k] = v
 
+    ser_in = []
+    if args.serial_in:
+        for val in args.serial_in.split(','):
+            try: ser_in.append(float(val))
+            except: ser_in.append(val)
+
     with open(args.file, 'r') as f: code = f.read()
-    it = EGLInterpreter(initial_vars=init_vars)
+    it = EGLInterpreter(initial_vars=init_vars, serial_in=ser_in)
     it.run_code(code)
     if it.images["main"]:
         it.images["main"].save(args.output)
