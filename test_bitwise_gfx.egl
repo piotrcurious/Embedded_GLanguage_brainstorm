@@ -1,0 +1,36 @@
+# EGL v1.2 Bitwise & Advanced Math Test
+# Generates a classic demoscene-inspired pattern using bitwise XOR and arrays.
+
+S(256, 256, "black");
+$sz = 256;
+AA("pixels", $sz * $sz);
+
+# Fill array with XOR pattern
+@($y, 0, 255, 1) {
+    @($x, 0, 255, 1) {
+        $idx = $y * 256 + $x;
+        # EGL eval_expr supports & | ^ ~ << >>
+        $val = $x ^ $y;
+        AV("pixels", $idx, $val);
+    }
+}
+
+# Draw sampled pixels
+K("white", 1); F("blue");
+@($i, 0, 10, 1) {
+    @($j, 0, 10, 1) {
+        $px = $i * 25;
+        $py = $j * 25;
+        $pidx = $py * 256 + $px;
+        AG("pixels", $pidx);
+        $v = $result;
+        # Use value to determine color (using host interaction via F)
+        # We can simulate F with dynamic hex or simple strings
+        ?($v > 128) {
+            F("#00FF00");
+        } : {
+            F("#0000FF");
+        }
+        M($px, $py); BX($px, $py, 10, 10);
+    }
+}

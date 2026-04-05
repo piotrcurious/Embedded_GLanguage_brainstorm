@@ -1,0 +1,21 @@
+# EGL v1.2 Serial Protocol Sync Demo
+# Run with: python3 egl_interpreter.py test_serial_protocol.egl --serial-in 10,20,30,40
+
+S(400, 400, "black");
+K("white", 1); F("blue");
+
+# Handshake: Output a signal to host
+> ("WAITING_FOR_DATA");
+
+# Read data from serial buffer and draw based on input
+$count = 0;
+WH($count < 4) {
+    <($val); # Read from host
+    $x = $count * 100 + 50;
+    $y = 400 - $val * 5;
+    M($x, $y);
+    BX($x, $y, 50, $val * 5);
+    $count = $count + 1;
+}
+
+> ("SYNC_COMPLETE");

@@ -1,0 +1,26 @@
+# EGL v1.3 Animation Demo
+# Demonstrates Double Buffering (FB) and VSync (VS) for smooth animation.
+
+S(400, 400, "black");
+
+# Create a sprite to animate
+P("ball", 40, 40);
+F("red"); K("white", 2);
+M(20, 20); C(15);
+
+# Animation Loop (Simulated)
+# In real-time, this would be triggered per-frame by the host.
+@($frame, 0, 10, 1) {
+    P("main");
+    # Clear back-buffer (simplified clear with fill-rect)
+    F("black"); BX(0, 0, 400, 400);
+
+    # Draw moving ball
+    $bx = 50 + $frame * 30;
+    $by = 200 + 50 * sin($frame);
+    DX("ball", $bx, $by);
+
+    # Sync and Flip
+    VS(); # Wait sync
+    FB(); # Copy back-buffer to front
+}
