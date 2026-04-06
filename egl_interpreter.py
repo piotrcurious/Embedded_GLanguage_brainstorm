@@ -4,6 +4,8 @@ import sys
 import argparse
 import time
 import random
+import ast
+import operator
 from PIL import Image, ImageDraw, ImageFont, ImageChops
 
 class EGLValue:
@@ -37,7 +39,9 @@ class EGLValue:
     def __ge__(self, other): return self.val >= getattr(other, 'val', other)
     def __eq__(self, other): return self.val == getattr(other, 'val', other)
     def __ne__(self, other): return self.val != getattr(other, 'val', other)
-    def __str__(self): return str(self.val)
+    def __str__(self):
+        if isinstance(self.val, float) and self.val.is_integer(): return str(int(self.val))
+        return str(self.val)
     def __repr__(self): return repr(self.val)
     def __int__(self): return int(float(self.val))
     def __float__(self): return float(self.val)
@@ -70,6 +74,15 @@ class EGLInterpreter:
         self.serial_out = []
         self.start_time = time.time()
 
+        self.operators = {
+            ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul,
+            ast.Div: operator.truediv, ast.Mod: operator.mod, ast.Pow: operator.pow,
+            ast.BitXor: operator.xor, ast.BitAnd: getattr(operator, "and_"), ast.BitOr: getattr(operator, "or_"),
+            ast.Lt: operator.lt, ast.LtE: operator.le, ast.Gt: operator.gt,
+            ast.GtE: operator.ge, ast.Eq: operator.eq, ast.NotEq: operator.ne,
+            ast.USub: operator.neg, ast.UAdd: operator.pos
+        }
+
     def set_var(self, name, val):
         target_val = val.val if isinstance(val, EGLValue) else val
         if name in self.globals: self.globals[name] = target_val
@@ -86,56 +99,111 @@ class EGLInterpreter:
         s = str(expr).strip()
         if not s: return EGLValue(0)
 
+        # Optimization for simple numeric literals
+        if s.isdigit(): return EGLValue(int(s))
+        try:
+            f = float(s)
+            if '.' in s: return EGLValue(f)
+            return EGLValue(int(f))
+        except: pass
+
         all_vars = self.globals.copy()
         for scope in self.scopes: all_vars.update(scope)
 
-        eval_scope = {
-            "__builtins__": None, "math": math,
-            "cos": lambda x: math.cos(float(getattr(x, 'val', x))), "sin": lambda x: math.sin(float(getattr(x, 'val', x))),
-            "tan": lambda x: math.tan(float(getattr(x, 'val', x))), "sqrt": lambda x: math.sqrt(float(getattr(x, 'val', x))),
-            "abs": lambda x: abs(float(getattr(x, 'val', x))), "min": lambda a, b: min(float(getattr(a, 'val', a)), float(getattr(b, 'val', b))),
-            "max": lambda a, b: max(float(getattr(a, 'val', a)), float(getattr(b, 'val', b))), "pi": math.pi,
-            "int": lambda x: int(float(getattr(x, 'val', x))), "float": lambda x: float(getattr(x, 'val', x)),
-            "pow": lambda a, b: pow(float(getattr(a, 'val', a)), float(getattr(b, 'val', b))),
-            "round": lambda x: round(float(getattr(x, 'val', x))), "len": lambda x: len(str(getattr(x, 'val', x))), "str": str,
-            "hex": lambda x: hex(int(float(getattr(x, 'val', x)))),
-            "zfill": lambda s, n: str(getattr(s, 'val', s)).zfill(int(float(getattr(n, 'val', n)))),
-            "ST": lambda s, start, end=None: str(getattr(s, 'val', s))[int(float(getattr(start, 'val', start))):int(float(getattr(end, 'val', end))) if end is not None else None],
-            "KS": lambda k: 1 if self.key_states.get(str(getattr(k, 'val', k))) else 0,
+        builtins = {
+            "cos": lambda x: math.cos(float(x)), "sin": lambda x: math.sin(float(x)),
+            "tan": lambda x: math.tan(float(x)), "sqrt": lambda x: math.sqrt(float(x)),
+            "abs": lambda x: abs(float(x)), "min": lambda a, b: min(float(a), float(b)),
+            "max": lambda a, b: max(float(a), float(b)), "pow": lambda a, b: pow(float(a), float(b)),
+            "round": lambda x: round(float(x)), "len": lambda x: len(str(x)),
+            "int": lambda x: int(float(x)), "float": lambda x: float(x), "str": str,
+            "hex": lambda x: hex(int(float(x))), "zfill": lambda s, n: str(s).zfill(int(float(n))),
+            "ST": lambda s, start, length=None: str(s)[int(float(start)):int(float(start))+int(float(length)) if length is not None else None],
+            "KS": lambda k: 1 if self.key_states.get(str(k)) else 0,
             "MS": lambda: int((time.time() - self.start_time) * 1000),
-            "RN": lambda a, b: random.randint(int(float(getattr(a, 'val', a))), int(float(getattr(b, 'val', b)))),
-            "HC": lambda x1, y1, w1, h1, x2, y2, w2, h2: 1 if (float(getattr(x1, 'val', x1)) < float(getattr(x2, 'val', x2)) + float(getattr(w2, 'val', w2)) and float(getattr(x1, 'val', x1)) + float(getattr(w1, 'val', w1)) > float(getattr(x2, 'val', x2)) and float(getattr(y1, 'val', y1)) < float(getattr(y2, 'val', y2)) + float(getattr(h2, 'val', h2)) and float(getattr(y1, 'val', y1)) + float(getattr(h1, 'val', h1)) > float(getattr(y2, 'val', y2))) else 0,
-            "EGLValue": EGLValue
+            "RN": lambda a, b: random.randint(int(float(a)), int(float(b))),
+            "HC": lambda x1, y1, w1, h1, x2, y2, w2, h2: 1 if (float(x1) < float(x2) + float(w2) and float(x1) + float(w1) > float(x2) and float(y1) < float(y2) + float(h2) and float(y1) + float(h1) > float(y2)) else 0
         }
 
-        # Extract string literals to avoid confusing the variable replacement
-        literals = []
-        def lit_repl(m):
-            literals.append(m.group(0))
-            return f"__LIT_{len(literals)-1}__"
-        processed = re.sub(r'"[^"]*"', lit_repl, s)
+        safe_to_real = {}
+        # Pre-process EGL variables into VARMARKERi
+        # To avoid nested replacements, we use a single pass with a regex
+        egl_vars = sorted(all_vars.keys(), key=len, reverse=True)
+        var_pattern = '|'.join([re.escape(k) for k in egl_vars])
 
-        # Safer Variable Replacement: Match $... that are NOT preceded by a character that could be part of a variable name.
-        vars_found = re.findall(r'\$[a-zA-Z0-9_]+', processed)
-        for i, vname in enumerate(sorted(set(vars_found), key=len, reverse=True)):
-            safe_name = f"_v{i}"
-            eval_scope[safe_name] = EGLValue(all_vars.get(vname, 0))
-            pattern = r'(?<![a-zA-Z0-9_])' + re.escape(vname) + r'(?![a-zA-Z0-9_])'
+        processed = s
+        if egl_vars:
+            def var_repl_func(m):
+                vname = m.group(0)
+                # Find index in egl_vars
+                idx = egl_vars.index(vname)
+                safe_name = f"VARMARKER{idx}"
+                safe_to_real[safe_name] = vname
+                return safe_name
+            # This is still dangerous inside string literals.
+            # We must use the literal protection.
+
+        self.literals = []
+        def lit_repl(m):
+            self.literals.append(m.group(0))
+            return f"LITERALMARKER{len(self.literals)-1}"
+
+        processed = re.sub(r'"[^"]*"|\'[^\']*\'', lit_repl, s)
+
+        for i, vname in enumerate(egl_vars):
+            safe_name = f"V_{i}_V" # Use a more unique internal name
+            safe_to_real[safe_name] = vname
+            pattern = r'(?<![a-zA-Z0-9_\$])' + re.escape(vname) + r'(?![a-zA-Z0-9_])'
             processed = re.sub(pattern, safe_name, processed)
 
-        # Restore literals but wrapped in EGLValue for correct concat behavior
-        for i, lit in enumerate(literals):
-            content = lit[1:-1]
-            processed = processed.replace(f"__LIT_{i}__", f"EGLValue({repr(content)})")
+        for i, lit in enumerate(self.literals):
+            processed = processed.replace(f"LITERALMARKER{i}", lit)
+
+        def _eval_node(node):
+            if hasattr(ast, 'Constant') and isinstance(node, ast.Constant):
+                return node.value
+            # Use getattr to avoid DeprecationWarnings on newer Python while supporting older versions
+            elif isinstance(node, ast.AST) and hasattr(node, 'n'):
+                return node.n
+            elif isinstance(node, ast.AST) and hasattr(node, 's'):
+                return node.s
+            elif isinstance(node, ast.Name):
+                if node.id in safe_to_real: return all_vars.get(safe_to_real[node.id], 0)
+                if node.id == "V": # Handle our V markers if they get parsed weirdly
+                    pass
+                if node.id in ["True", "False", "None"]: return {"True":True, "False":False, "None":None}[node.id]
+                if node.id == "pi": return math.pi
+                return 0
+            elif isinstance(node, ast.Attribute):
+                if isinstance(node.value, ast.Name) and node.value.id == "math": return getattr(math, node.attr)
+                return 0
+            elif isinstance(node, ast.BinOp):
+                v1, v2 = _eval_node(node.left), _eval_node(node.right)
+                return self.operators[type(node.op)](EGLValue(v1), EGLValue(v2)).val
+            elif isinstance(node, ast.UnaryOp):
+                return self.operators[type(node.op)](EGLValue(_eval_node(node.operand))).val
+            elif isinstance(node, ast.Compare):
+                left = EGLValue(_eval_node(node.left))
+                for op, right in zip(node.ops, node.comparators):
+                    if not self.operators[type(op)](left, EGLValue(_eval_node(right))): return 0
+                    left = EGLValue(_eval_node(right))
+                return 1
+            elif isinstance(node, ast.Call):
+                func_name = node.func.id if isinstance(node.func, ast.Name) else None
+                if func_name in builtins:
+                    args = [_eval_node(arg) for arg in node.args]
+                    res = builtins[func_name](*args)
+                    return res.val if isinstance(res, EGLValue) else res
+            return 0
 
         try:
-            res = eval(processed, eval_scope)
-            if isinstance(res, EGLValue): return res
-            if isinstance(res, (int, float, str)): return EGLValue(res)
-            return EGLValue(res)
+            tree = ast.parse(processed, mode='eval')
+            return EGLValue(_eval_node(tree.body))
         except Exception as e:
-            # If it's a simple string that didn't eval (like an unquoted color), return as is
-            if s.startswith('"') and s.endswith('"'): return EGLValue(s[1:-1])
+            # Final fallback: if s is wrapped in VARMARKER/LITERALMARKER,
+            # it might be a single variable or literal that AST didn't like?
+            # Actually, ast.parse(VARMARKER) should work.
+            # This is likely for things like color names: "red" (without quotes)
             return EGLValue(s)
 
     def parse_balanced(self, text, open_char, close_char):
@@ -201,10 +269,8 @@ class EGLInterpreter:
             elif cmd == 'FB':
                 if "main" in self.images and self.front_buffer: self.front_buffer.paste(self.images["main"])
                 if self.target_fps > 0: time.sleep(1.0 / self.target_fps)
-            elif cmd == 'FR':
-                self.target_fps = int(float(args[0]))
-            elif cmd == 'CP':
-                self.palette[int(float(args[0])) % 256] = args[1]
+            elif cmd == 'FR': self.target_fps = int(float(args[0]))
+            elif cmd == 'CP': self.palette[int(float(args[0])) % 256] = args[1]
             elif cmd == 'P':
                 id = str(args[0])
                 if len(args) >= 3:
@@ -249,10 +315,8 @@ class EGLInterpreter:
                 s_val = str(args[0]); start = int(args[1])
                 if len(args) > 2: self.set_var("$result", s_val[start:start+int(args[2])])
                 else: self.set_var("$result", s_val[start:])
-            elif cmd == 'KS':
-                self.set_var("$result", 1 if self.key_states.get(str(args[0])) else 0)
-            elif cmd == 'KP':
-                self.key_states[str(args[0])] = int(float(args[1]))
+            elif cmd == 'KS': self.set_var("$result", 1 if self.key_states.get(str(args[0])) else 0)
+            elif cmd == 'KP': self.key_states[str(args[0])] = int(float(args[1]))
             elif cmd == 'DB': print(f"DEBUG DUMP: Globals: {self.globals}\nArrays: {self.arrays.keys()}")
             elif cmd == 'HZ': self.hit_zones.append((float(args[1]), float(args[2]), float(args[3]), float(args[4]), str(args[5])))
             elif cmd == 'MC': self.event_queue.append(('MC', float(args[0]), float(args[1]), float(args[2])))
@@ -283,11 +347,8 @@ class EGLInterpreter:
                         else: d.line([(0, i), (w, i)], fill=curr_c)
                     img.paste(base, (int(x), int(y)), base)
             elif cmd == 'BX':
-                if len(args) >= 4:
-                    x, y, w, h = map(float, args[0:4])
-                else:
-                    x, y = self.pos
-                    w, h = map(float, args[0:2])
+                if len(args) >= 4: x, y, w, h = map(float, args[0:4])
+                else: x, y = self.pos; w, h = map(float, args[0:2])
                 if draw: draw.rectangle([x, y, x+w, y+h], fill=self._get_rgba(self.fill_color), outline=self._get_rgba(self.stroke_color), width=self.stroke_width)
             elif cmd == 'AA': self.arrays[str(args[0])] = [0] * int(float(args[1]))
             elif cmd == 'AV':
@@ -320,30 +381,19 @@ class EGLInterpreter:
                 if len(args) >= 4:
                     pts = [(float(args[i]), float(args[i+1])) for i in range(0, len(args)-1, 2)]
                     if draw:
-                        if self.fill_color and self.fill_color != "None":
-                            draw.polygon(pts, fill=self._get_rgba(self.fill_color), outline=self._get_rgba(self.stroke_color), width=self.stroke_width)
-                        else:
-                            draw.line(pts + [pts[0]], fill=self._get_rgba(self.stroke_color), width=self.stroke_width)
+                        if self.fill_color and self.fill_color != "None": draw.polygon(pts, fill=self._get_rgba(self.fill_color), outline=self._get_rgba(self.stroke_color), width=self.stroke_width)
+                        else: draw.line(pts + [pts[0]], fill=self._get_rgba(self.stroke_color), width=self.stroke_width)
             elif cmd == 'Z':
-                if len(args) >= 4:
-                    self.clip = [float(a) for a in args[0:4]]
-                    # Note: PIL doesn't have a simple global clip state for all draw calls easily,
-                    # but we can implement it by wrapping draw calls or using a layer.
-                    # For simplicity in this interpreter, we'll store it but it may not be fully applied yet.
+                if len(args) >= 4: self.clip = [float(a) for a in args[0:4]]
                 else: self.clip = None
             elif cmd == 'T':
                 if draw:
                     try: f = ImageFont.load_default(); draw.text(self.pos, str(args[0]), fill=self._get_rgba(self.stroke_color), font=f)
                     except: pass
-            elif cmd == 'D': # Legacy sprite draw, map to DX
-                id, x, y = str(args[0]), float(args[1]), float(args[2])
-                self.run_cmd('DX', [id, x, y])
+            elif cmd == 'D': self.run_cmd('DX', [args[0], args[1], args[2]])
             elif cmd == '>':
                 if args:
-                    v = args[0]; msg = str(getattr(v, 'val', v))
-                    self.serial_out.append(msg); print(f"SERIAL OUT: {msg}")
-                else:
-                    self.serial_out.append(""); print("SERIAL OUT: ")
+                    msg = str(args[0]); self.serial_out.append(msg); sys.stdout.write("SERIAL OUT: " + msg + "\n"); sys.stdout.flush()
             elif cmd == '<':
                 vn = str(args[0]).strip('()$ '); val = self.serial_in.pop(0) if self.serial_in else 0; self.set_var('$' + vn, val)
             elif cmd == '[': self.state_stack.append((self.pos, self.stroke_color, self.stroke_width, self.fill_color, self.active_surface, self.clip))
@@ -409,7 +459,7 @@ class EGLInterpreter:
                             self.run_code(body); local = self.scopes.pop()
                             if "$result" in local: self.set_var("$result", local["$result"])
                         continue
-                m = re.match(r'([A-Z]{1,2})', code[i:])
+                m = re.match(r'([A-Z_]{1,10})', code[i:])
                 if m:
                     cmd = m.group(1); i += m.end(); args_r = ""
                     if i < len(code) and code[i] == '(': args_r, rest = self.parse_balanced(code[i:], '(', ')'); i = len(code) - len(rest)
@@ -422,8 +472,7 @@ class EGLInterpreter:
                         args_r, rest = self.parse_balanced(code[i:], '(', ')')
                         i = len(code) - len(rest)
                         self.run_cmd(cmd, self.parse_args(args_r))
-                    else:
-                        self.run_cmd(cmd, [])
+                    else: self.run_cmd(cmd, [])
                     continue
                 i += 1
             except Exception as e:
@@ -440,7 +489,6 @@ if __name__ == "__main__":
     parser.add_argument("--events", help="Pre-load events")
     parser.add_argument("--output", default="output.png", help="Output PNG file")
     args = parser.parse_args()
-
     init_vars = {}
     if args.vars:
         for item in args.vars.split(','):
@@ -449,13 +497,11 @@ if __name__ == "__main__":
                 try: init_vars[k] = float(v)
                 except: init_vars[k] = v
             except: pass
-
     ser_in = []
     if args.serial_in:
         for val in args.serial_in.split(','):
             try: ser_in.append(float(val))
             except: ser_in.append(val)
-
     it = EGLInterpreter(initial_vars=init_vars, serial_in=ser_in)
     if args.events:
         for ev_s in args.events.split(';'):
@@ -463,13 +509,10 @@ if __name__ == "__main__":
             if pts[0] == 'MC': it.event_queue.append(('MC', float(pts[1]), float(pts[2]), float(pts[3])))
             elif pts[0] == 'KC': it.event_queue.append(('KC', str(pts[1]), str(pts[2])))
             elif pts[0] == 'KP': it.key_states[str(pts[1])] = int(float(pts[2]))
-
     try:
         with open(args.file, 'r') as f: code = f.read()
         it.run_code(code)
-    except Exception as e:
-        print(f"INTERPRETER CRASH: {e}")
-
+    except Exception as e: print(f"INTERPRETER CRASH: {e}")
     out_img = it.front_buffer if it.front_buffer else it.images.get("main")
     if out_img: out_img.save(args.output); print(f"Saved to {args.output}")
     print("Done.")
