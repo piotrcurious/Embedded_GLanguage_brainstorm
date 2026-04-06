@@ -1,0 +1,80 @@
+# EGL Stress Test Suite
+S(400, 400, "black")
+FR(0)
+
+:LOG(msg) { >(msg) }
+
+# -- STRESS 1: RECURSION (Ackermann(3, 3) = 61) --
+:ACK(m, n) {
+  ?(m == 0) { $result = n + 1 } : {
+    ?(n == 0) { !ACK(m - 1, 1) } : {
+      !ACK(m, n - 1)
+      $tmp = $result
+      !ACK(m - 1, $tmp)
+    }
+  }
+}
+
+!LOG("Starting Ackermann(3, 1)...")
+MS()
+$t_start = $result
+!ACK(3, 1) # Expect 13
+$ack_res = $result
+MS()
+!LOG("Ackermann(3, 1) = " + $ack_res + " in " + ($result - $t_start) + "ms")
+
+# -- STRESS 2: ARRAYS (Bubble Sort 50 elements) --
+$size = 50
+AA("sort_me", $size)
+!LOG("Initializing array with random values...")
+@($i, 0, $size - 1, 1) {
+  RN(0, 1000)
+  AV("sort_me", $i, $result)
+}
+
+!LOG("Sorting...")
+MS()
+$t_start = $result
+@($i, 0, $size - 2, 1) {
+  @($j, 0, $size - $i - 2, 1) {
+    AG("sort_me", $j); $v1 = $result
+    AG("sort_me", $j + 1); $v2 = $result
+    ?($v1 > $v2) {
+      AV("sort_me", $j, $v2)
+      AV("sort_me", $j + 1, $v1)
+    }
+  }
+}
+MS()
+!LOG("Sorted 50 elements in " + ($result - $t_start) + "ms")
+
+# -- STRESS 3: GRAPHICS VOLUME (1000 Primitives) --
+!LOG("Drawing 1000 random circles...")
+MS()
+$t_start = $result
+@($i, 1, 1000, 1) {
+  RN(0, 400); $x = $result
+  RN(0, 400); $y = $result
+  RN(0, 255); $r = $result
+  RN(0, 255); $g = $result
+  RN(0, 255); $b = $result
+  F("rgb(" + $r + "," + $g + "," + $b + ")")
+  K("None")
+  M($x, $y)
+  C(5)
+}
+MS()
+!LOG("Drew 1000 circles in " + ($result - $t_start) + "ms")
+
+# -- STRESS 4: NESTED CANVASES & BLITS --
+!LOG("Testing nested drawing context overhead...")
+P("sprite", 100, 100)
+CL("blue")
+@($i, 0, 9, 1) {
+  P("main")
+  DX("sprite", 200, 200, $i * 36, 1.0, 0.5)
+}
+!LOG("Nested blit test complete.")
+
+!LOG("STRESS TEST FINISHED.")
+FB()
