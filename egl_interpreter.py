@@ -381,7 +381,9 @@ class EGLInterpreter:
             "KS": lambda k: 1 if self.key_states.get(str(EGLValue(k))) else 0,
             "MS": lambda: int((time.time() - self.start_time) * 1000),
             "RN": lambda a, b: random.randint(int(float(EGLValue(a))), int(float(EGLValue(b)))),
-            "HC": lambda x1, y1, w1, h1, x2, y2, w2, h2: 1 if (float(EGLValue(x1)) < float(EGLValue(x2)) + float(EGLValue(w2)) and float(EGLValue(x1)) + float(EGLValue(w1)) > float(EGLValue(x2)) and float(y1) < float(y2) + float(h2) and float(y1) + float(h1) > float(y2)) else 0
+            "HC": lambda x1, y1, w1, h1, x2, y2, w2, h2: 1 if (float(EGLValue(x1)) < float(EGLValue(x2)) + float(EGLValue(w2)) and float(EGLValue(x1)) + float(EGLValue(w1)) > float(EGLValue(x2)) and float(y1) < float(y2) + float(h2) and float(y1) + float(h1) > float(y2)) else 0,
+            "MPX": lambda: self.globals.get("$last_mouse_x", 0),
+            "MPY": lambda: self.globals.get("$last_mouse_y", 0)
         }
 
     def set_var(self, name, val):
@@ -568,10 +570,37 @@ class EGLInterpreter:
                 s_val = str(args[0]); start = int(args[1])
                 if len(args) > 2: self.set_var("$result", s_val[start:start+int(args[2])])
                 else: self.set_var("$result", s_val[start:])
+            elif cmd == 'LD':
+                if len(args) >= 6:
+                    sid, lx, ly, lw, lh, ldata = str(args[0]), int(float(args[1])), int(float(args[2])), int(float(args[3])), int(float(args[4])), str(args[5])
+                    if sid in self.images:
+                        target = self.images[sid]
+                        pixels = []
+                        for i in range(0, len(ldata), 2):
+                            try:
+                                p_idx = int(ldata[i:i+2], 16)
+                                pixels.append(self._get_rgba(p_idx))
+                            except: pixels.append((0,0,0,0))
+                        if len(pixels) >= lw * lh:
+                            patch = Image.new("RGBA", (lw, lh))
+                            patch.putdata(pixels[:lw*lh])
+                            target.paste(patch, (lx, ly))
             elif cmd == 'KS': self.set_var("$result", 1 if self.key_states.get(str(args[0])) else 0)
             elif cmd == 'KP': self.key_states[str(args[0])] = int(float(args[1]))
-            elif cmd == 'HZ': self.hit_zones.append((float(args[1]), float(args[2]), float(args[3]), float(args[4]), str(args[5])))
-            elif cmd == 'MC': self.event_queue.append(('MC', float(args[0]), float(args[1]), float(args[2])))
+            elif cmd == 'HZ':
+                if not args: self.hit_zones = []
+                elif len(args) >= 6:
+                    zid = str(args[0])
+                    coords = (float(args[1]), float(args[2]), float(args[3]), float(args[4]), str(args[5]))
+                    for i, hz in enumerate(self.hit_zones):
+                        if hz[0] == zid:
+                            self.hit_zones[i] = (zid,) + coords
+                            break
+                    else: self.hit_zones.append((zid,) + coords)
+            elif cmd == 'MC':
+                self.set_var("$last_mouse_x", float(args[0]))
+                self.set_var("$last_mouse_y", float(args[1]))
+                self.event_queue.append(('MC', float(args[0]), float(args[1]), float(args[2])))
             elif cmd == 'KC': self.event_queue.append(('KC', str(args[0]), str(args[1])))
             elif cmd == 'DE':
                 q = self.event_queue; self.event_queue = []
@@ -579,7 +608,7 @@ class EGLInterpreter:
                     if ev[0] == 'MC':
                         ex, ey, eb = ev[1:]
                         for hz in reversed(self.hit_zones):
-                            hx, hy, hw, hh, hf = hz
+                            hzid, hx, hy, hw, hh, hf = hz
                             if hx <= ex <= hx+hw and hy <= ey <= hy+hh:
                                 if hf in self.functions:
                                     self.set_var("$last_click_x", ex); self.set_var("$last_click_y", ey); self.set_var("$last_click_btn", eb)
