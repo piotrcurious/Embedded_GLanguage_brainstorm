@@ -1,8 +1,0 @@
-S(600, 400, "white");
-W(1, 50, 50, 500, 300, "EGL Test Window");
-UB(2, "Click Me", 70, 100, 100, 40, "on_click");
-UX(3, "Status: Ready", 70, 150, 200, 30);
->( "Hello from EGL" );
-<($ser_val);
-*("host_func", $ser_val, 123);
-UX(4, $ser_val, 70, 200, 100, 30);

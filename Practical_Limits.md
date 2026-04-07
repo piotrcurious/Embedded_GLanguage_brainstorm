@@ -11,8 +11,8 @@ Analysis assuming a typical DDR4-based thin client (e.g., Intel Celeron/Atom, 2G
   - **Limit:** Array sizes up to 100,000 are safe; performance of `AG`/`AV` remains high.
 
 ## Execution Performance
-- **Arithmetic & Logic:** Handled by `ast` evaluation with `EGLValue` operator overloading.
-  - ~50,000 to 100,000 operations per second depending on complexity.
+- **Arithmetic & Logic:** Handled by a formal Lexer/Parser with a custom AST visitor pattern.
+  - ~20,000 to 50,000 operations per second depending on complexity.
 - **Recursion:**
   - **Tested:** Ackermann(3, 1) completes in ~60ms.
   - **Depth:** Python's default recursion limit (~1000) is the bottleneck for deep EGL recursion.
