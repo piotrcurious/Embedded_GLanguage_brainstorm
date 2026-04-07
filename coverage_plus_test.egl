@@ -1,0 +1,34 @@
+# Coverage Plus Test Suite
+S(400, 400, "white")
+
+# -- SECTION 1: ERROR HANDLING --
+$x = 10 / 0;
+> ("Div by zero result: " + $x)
+$y = 10 % 0;
+> ("Mod by zero result: " + $y)
+
+# -- SECTION 2: ARRAY BOUNDS --
+AA("bounds_test", 5)
+AV("bounds_test", 10, 999) # Out of bounds set
+AG("bounds_test", 10)
+> ("OOB get result: " + $result)
+
+# -- SECTION 3: SYSTEM COMMANDS --
+SR(123)
+> "Random seed set."
+SA()
+> ("Serial available: " + $result)
+VS()
+> "Wait sync called."
+
+# -- SECTION 4: FUNCTION REDEFINITION --
+:FOO() { > "Original FOO" }
+!FOO()
+:FOO() { > "Redefined FOO" }
+!FOO()
+
+# -- SECTION 5: COMPLEX NESTING --
+$v = abs(min(-10, max(-20, -5)));
+> ("Nested math result: " + $v)
+
+FB()

@@ -6,11 +6,13 @@ import time
 import random
 import ast
 import operator
+from enum import Enum, auto
 from PIL import Image, ImageDraw, ImageFont, ImageChops
 
 class EGLValue:
     def __init__(self, val):
         if isinstance(val, EGLValue): self.val = val.val
+        elif isinstance(val, bool): self.val = 1 if val else 0
         else: self.val = val
     def __add__(self, other):
         v1, v2 = self.val, getattr(other, 'val', other)
@@ -26,19 +28,58 @@ class EGLValue:
     def __rsub__(self, other): return EGLValue(float(getattr(other, 'val', other)) - float(self.val))
     def __mul__(self, other): return EGLValue(float(self.val) * float(getattr(other, 'val', other)))
     def __rmul__(self, other): return EGLValue(float(getattr(other, 'val', other)) * float(self.val))
-    def __truediv__(self, other): return EGLValue(float(self.val) / float(getattr(other, 'val', other)))
-    def __rtruediv__(self, other): return EGLValue(float(getattr(other, 'val', other)) / float(self.val))
-    def __mod__(self, other): return EGLValue(float(self.val) % float(getattr(other, 'val', other)))
-    def __rmod__(self, other): return EGLValue(float(getattr(other, 'val', other)) % float(self.val))
+    def __truediv__(self, other):
+        try: return EGLValue(float(self.val) / float(getattr(other, 'val', other)))
+        except ZeroDivisionError: return EGLValue(0)
+    def __rtruediv__(self, other):
+        try: return EGLValue(float(getattr(other, 'val', other)) / float(self.val))
+        except ZeroDivisionError: return EGLValue(0)
+    def __mod__(self, other):
+        try: return EGLValue(float(self.val) % float(getattr(other, 'val', other)))
+        except ZeroDivisionError: return EGLValue(0)
+    def __rmod__(self, other):
+        try: return EGLValue(float(getattr(other, 'val', other)) % float(self.val))
+        except ZeroDivisionError: return EGLValue(0)
     def __xor__(self, other): return EGLValue(int(float(self.val)) ^ int(float(getattr(other, 'val', other))))
     def __and__(self, other): return EGLValue(int(float(self.val)) & int(float(getattr(other, 'val', other))))
     def __or__(self, other): return EGLValue(int(float(self.val)) | int(float(getattr(other, 'val', other))))
-    def __lt__(self, other): return self.val < getattr(other, 'val', other)
-    def __le__(self, other): return self.val <= getattr(other, 'val', other)
-    def __gt__(self, other): return self.val > getattr(other, 'val', other)
-    def __ge__(self, other): return self.val >= getattr(other, 'val', other)
-    def __eq__(self, other): return self.val == getattr(other, 'val', other)
-    def __ne__(self, other): return self.val != getattr(other, 'val', other)
+    def __neg__(self):
+        try: return EGLValue(-float(self.val))
+        except: return EGLValue(0)
+    def __pos__(self):
+        try: return EGLValue(float(self.val))
+        except: return EGLValue(self.val)
+    def _coerce(self, other):
+        v1, v2 = self.val, getattr(other, 'val', other)
+        if isinstance(v1, (int, float)) and isinstance(v2, str):
+            try: v2 = float(v2)
+            except: pass
+        elif isinstance(v1, str) and isinstance(v2, (int, float)):
+            try: v1 = float(v1)
+            except: pass
+        return v1, v2
+    def __lt__(self, other):
+        v1, v2 = self._coerce(other)
+        try: return v1 < v2
+        except: return str(v1) < str(v2)
+    def __le__(self, other):
+        v1, v2 = self._coerce(other)
+        try: return v1 <= v2
+        except: return str(v1) <= str(v2)
+    def __gt__(self, other):
+        v1, v2 = self._coerce(other)
+        try: return v1 > v2
+        except: return str(v1) > str(v2)
+    def __ge__(self, other):
+        v1, v2 = self._coerce(other)
+        try: return v1 >= v2
+        except: return str(v1) >= str(v2)
+    def __eq__(self, other):
+        v1, v2 = self._coerce(other)
+        return v1 == v2
+    def __ne__(self, other):
+        v1, v2 = self._coerce(other)
+        return v1 != v2
     def __str__(self):
         if isinstance(self.val, float) and self.val.is_integer(): return str(int(self.val))
         return str(self.val)
@@ -46,9 +87,252 @@ class EGLValue:
     def __int__(self): return int(float(self.val))
     def __float__(self): return float(self.val)
 
+class TokenType(Enum):
+    LPAREN = auto(); RPAREN = auto(); LBRACE = auto(); RBRACE = auto()
+    COMMA = auto(); SEMICOLON = auto(); EQUAL = auto(); AT = auto()
+    QUESTION = auto(); COLON = auto(); BANG = auto(); GT = auto(); LT = auto()
+    LBRACKET = auto(); RBRACKET = auto()
+    PLUS = auto(); MINUS = auto(); STAR = auto(); SLASH = auto(); MOD = auto(); CARET = auto()
+    AND = auto(); OR = auto(); EQ = auto(); NE = auto(); GE = auto(); LE = auto()
+    IDENTIFIER = auto(); VARIABLE = auto(); NUMBER = auto(); STRING = auto()
+    EOF = auto()
+
+class Token:
+    def __init__(self, type, value, line, col):
+        self.type, self.value, self.line, self.col = type, value, line, col
+    def __repr__(self): return f"Token({self.type}, {repr(self.value)}, {self.line}:{self.col})"
+
+class ASTNode:
+    def __init__(self, line=0, col=0): self.line, self.col = line, col
+class BinOpNode(ASTNode):
+    def __init__(self, left, op, right, line=0, col=0): super().__init__(line, col); self.left, self.op, self.right = left, op, right
+class UnaryOpNode(ASTNode):
+    def __init__(self, op, operand, line=0, col=0): super().__init__(line, col); self.op, self.operand = op, operand
+class LiteralNode(ASTNode):
+    def __init__(self, value, line=0, col=0): super().__init__(line, col); self.value = value
+class VarNode(ASTNode):
+    def __init__(self, name, line=0, col=0): super().__init__(line, col); self.name = name
+class CallNode(ASTNode):
+    def __init__(self, name, args, line=0, col=0): super().__init__(line, col); self.name, self.args = name, args
+class AssignNode(ASTNode):
+    def __init__(self, name, expr, line=0, col=0): super().__init__(line, col); self.name, self.expr = name, expr
+class CommandNode(ASTNode):
+    def __init__(self, name, args, line=0, col=0): super().__init__(line, col); self.name, self.args = name, args
+class IfNode(ASTNode):
+    def __init__(self, cond, true_block, false_block=None, line=0, col=0): super().__init__(line, col); self.cond, self.true_block, self.false_block = cond, true_block, false_block
+class WhileNode(ASTNode):
+    def __init__(self, cond, block, line=0, col=0): super().__init__(line, col); self.cond, self.block = cond, block
+class ForNode(ASTNode):
+    def __init__(self, var, start, end, step, block, line=0, col=0): super().__init__(line, col); self.var, self.start, self.end, self.step, self.block = var, start, end, step, block
+class FuncDefNode(ASTNode):
+    def __init__(self, name, params, block, line=0, col=0): super().__init__(line, col); self.name, self.params, self.block = name, params, block
+class BlockNode(ASTNode):
+    def __init__(self, statements, line=0, col=0): super().__init__(line, col); self.statements = statements
+
+class Parser:
+    def __init__(self, tokens):
+        self.tokens = tokens; self.pos = 0
+    def peek(self): return self.tokens[self.pos]
+    def advance(self):
+        token = self.tokens[self.pos]; self.pos += 1; return token
+    def match(self, type):
+        if self.peek().type == type: return self.advance()
+        return None
+    def expect(self, type):
+        token = self.match(type)
+        if not token: raise SyntaxError(f"Expected {type}, got {self.peek().type} at {self.peek().line}:{self.peek().col}")
+        return token
+    def parse_program(self):
+        statements = []
+        start_line, start_col = self.peek().line, self.peek().col
+        while self.peek().type != TokenType.EOF:
+            stmt = self.parse_statement()
+            if stmt: statements.append(stmt)
+            while self.match(TokenType.SEMICOLON): pass
+        return BlockNode(statements, start_line, start_col)
+    def parse_statement(self):
+        token = self.peek()
+        line, col = token.line, token.col
+        if token.type == TokenType.VARIABLE:
+            name = self.advance().value; self.expect(TokenType.EQUAL); expr = self.parse_expression(); return AssignNode(name, expr, line, col)
+        elif token.type == TokenType.COLON:
+            self.advance()
+            if self.peek().type == TokenType.IDENTIFIER:
+                name = self.advance().value; self.expect(TokenType.LPAREN)
+                params = []
+                if self.peek().type != TokenType.RPAREN:
+                    params.append(self.advance().value)
+                    while self.match(TokenType.COMMA): params.append(self.advance().value)
+                self.expect(TokenType.RPAREN); self.expect(TokenType.LBRACE); block = self.parse_block(); return FuncDefNode(name, params, block, line, col)
+            return None
+        elif token.type == TokenType.QUESTION:
+            self.advance(); self.expect(TokenType.LPAREN); cond = self.parse_expression(); self.expect(TokenType.RPAREN); self.expect(TokenType.LBRACE); true_block = self.parse_block()
+            false_block = None
+            if self.match(TokenType.COLON):
+                if self.peek().type == TokenType.LBRACE: self.advance(); false_block = self.parse_block()
+            return IfNode(cond, true_block, false_block, line, col)
+        elif token.type == TokenType.IDENTIFIER and token.value == "WH":
+            self.advance(); self.expect(TokenType.LPAREN); cond = self.parse_expression(); self.expect(TokenType.RPAREN); self.expect(TokenType.LBRACE); block = self.parse_block(); return WhileNode(cond, block, line, col)
+        elif token.type == TokenType.AT:
+            self.advance(); self.expect(TokenType.LPAREN); var = self.expect(TokenType.VARIABLE).value; self.expect(TokenType.COMMA); start = self.parse_expression()
+            self.expect(TokenType.COMMA); end = self.parse_expression(); self.expect(TokenType.COMMA); step = self.parse_expression(); self.expect(TokenType.RPAREN); self.expect(TokenType.LBRACE); block = self.parse_block()
+            return ForNode(var, start, end, step, block, line, col)
+        elif token.type == TokenType.BANG:
+            self.advance(); name = self.expect(TokenType.IDENTIFIER).value; args = []
+            if self.match(TokenType.LPAREN): args = self.parse_args(); self.expect(TokenType.RPAREN)
+            return CallNode(name, args, line, col)
+        elif token.type in [TokenType.IDENTIFIER, TokenType.GT, TokenType.LT, TokenType.STAR, TokenType.LBRACKET, TokenType.RBRACKET]:
+            name = self.advance().value; args = []
+            if self.match(TokenType.LPAREN): args = self.parse_args(); self.expect(TokenType.RPAREN)
+            elif name in ['>', '<', '*', '[', ']'] and self.peek().type in [TokenType.NUMBER, TokenType.STRING, TokenType.VARIABLE, TokenType.IDENTIFIER, TokenType.LPAREN]:
+                args = [self.parse_expression()]
+            return CommandNode(name, args, line, col)
+        elif self.match(TokenType.SEMICOLON): return None
+        else: raise SyntaxError(f"Unexpected token {token} at statement start")
+    def parse_block(self):
+        statements = []
+        start_line, start_col = self.peek().line, self.peek().col
+        while self.peek().type != TokenType.RBRACE and self.peek().type != TokenType.EOF:
+            stmt = self.parse_statement()
+            if stmt: statements.append(stmt)
+            while self.match(TokenType.SEMICOLON): pass
+        self.expect(TokenType.RBRACE); return BlockNode(statements, start_line, start_col)
+    def parse_args(self):
+        args = []
+        if self.peek().type != TokenType.RPAREN:
+            args.append(self.parse_expression())
+            while self.match(TokenType.COMMA) or self.match(TokenType.SEMICOLON): args.append(self.parse_expression())
+        return args
+    def parse_expression(self): return self.parse_comparison()
+    def parse_comparison(self):
+        node = self.parse_arithmetic()
+        while self.peek().type in [TokenType.EQ, TokenType.NE, TokenType.GE, TokenType.LE]:
+            line, col = self.peek().line, self.peek().col
+            op = self.advance().type; node = BinOpNode(node, op, self.parse_arithmetic(), line, col)
+        while self.peek().type == TokenType.IDENTIFIER and self.peek().value in ['>', '<']:
+            line, col = self.peek().line, self.peek().col
+            op_val = self.advance().value
+            op_type = TokenType.GT if op_val == '>' else TokenType.LT
+            node = BinOpNode(node, op_type, self.parse_arithmetic(), line, col)
+        return node
+    def parse_arithmetic(self):
+        node = self.parse_term()
+        while self.peek().type in [TokenType.PLUS, TokenType.MINUS, TokenType.OR, TokenType.CARET]:
+            line, col = self.peek().line, self.peek().col
+            op = self.advance().type; node = BinOpNode(node, op, self.parse_term(), line, col)
+        return node
+    def parse_term(self):
+        node = self.parse_factor()
+        while self.peek().type in [TokenType.STAR, TokenType.SLASH, TokenType.MOD, TokenType.AND]:
+            line, col = self.peek().line, self.peek().col
+            op = self.advance().type; node = BinOpNode(node, op, self.parse_factor(), line, col)
+        return node
+    def parse_factor(self):
+        token = self.peek()
+        line, col = token.line, token.col
+        if token.type == TokenType.PLUS: self.advance(); return UnaryOpNode(TokenType.PLUS, self.parse_factor(), line, col)
+        if token.type == TokenType.MINUS: self.advance(); return UnaryOpNode(TokenType.MINUS, self.parse_factor(), line, col)
+        return self.parse_primary()
+    def parse_primary(self):
+        token = self.peek()
+        line, col = token.line, token.col
+        token = self.advance()
+        if token.type == TokenType.NUMBER or token.type == TokenType.STRING: return LiteralNode(token.value, line, col)
+        elif token.type == TokenType.VARIABLE: return VarNode(token.value, line, col)
+        elif token.type == TokenType.IDENTIFIER:
+            if self.match(TokenType.LPAREN): args = self.parse_args(); self.expect(TokenType.RPAREN); return CallNode(token.value, args, line, col)
+            return VarNode(token.value, line, col)
+        elif token.type == TokenType.LPAREN: expr = self.parse_expression(); self.expect(TokenType.RPAREN); return expr
+        raise SyntaxError(f"Unexpected token in expression: {token}")
+
+class Lexer:
+    def __init__(self, text):
+        self.text = text; self.pos = 0; self.line = 1; self.col = 1
+    def advance(self):
+        char = self.text[self.pos]; self.pos += 1
+        if char == '\n': self.line += 1; self.col = 1
+        else: self.col += 1
+        return char
+    def peek(self): return self.text[self.pos] if self.pos < len(self.text) else None
+    def get_tokens(self):
+        tokens = []
+        paren_depth = 0
+        while self.pos < len(self.text):
+            char = self.peek()
+            if char.isspace():
+                if char == '\n' and paren_depth == 0:
+                    if tokens and tokens[-1].type not in [TokenType.SEMICOLON, TokenType.LBRACE, TokenType.COMMA]:
+                        tokens.append(Token(TokenType.SEMICOLON, ";", self.line, self.col))
+                self.advance()
+            elif char == '#':
+                while self.peek() and self.peek() != '\n': self.advance()
+            elif char.isdigit(): tokens.append(self.read_number())
+            elif char == '"' or char == "'": tokens.append(self.read_string(char))
+            elif char == '$': tokens.append(self.read_variable())
+            elif char.isalpha() or char == '_': tokens.append(self.read_identifier())
+            elif char == '(':
+                paren_depth += 1; tokens.append(Token(TokenType.LPAREN, self.advance(), self.line, self.col))
+            elif char == ')':
+                paren_depth = max(0, paren_depth - 1); tokens.append(Token(TokenType.RPAREN, self.advance(), self.line, self.col))
+            elif char == '{': tokens.append(Token(TokenType.LBRACE, self.advance(), self.line, self.col))
+            elif char == '}': tokens.append(Token(TokenType.RBRACE, self.advance(), self.line, self.col))
+            elif char == '[':
+                paren_depth += 1; tokens.append(Token(TokenType.LBRACKET, self.advance(), self.line, self.col))
+            elif char == ']':
+                paren_depth = max(0, paren_depth - 1); tokens.append(Token(TokenType.RBRACKET, self.advance(), self.line, self.col))
+            elif char == ',': tokens.append(Token(TokenType.COMMA, self.advance(), self.line, self.col))
+            elif char == ';': tokens.append(Token(TokenType.SEMICOLON, self.advance(), self.line, self.col))
+            elif char == '=':
+                line, col = self.line, self.col; self.advance()
+                if self.peek() == '=': self.advance(); tokens.append(Token(TokenType.EQ, "==", line, col))
+                else: tokens.append(Token(TokenType.EQUAL, "=", line, col))
+            elif char == '!':
+                line, col = self.line, self.col; self.advance()
+                if self.peek() == '=': self.advance(); tokens.append(Token(TokenType.NE, "!=", line, col))
+                else: tokens.append(Token(TokenType.BANG, "!", line, col))
+            elif char == '>':
+                line, col = self.line, self.col; self.advance()
+                if self.peek() == '=': self.advance(); tokens.append(Token(TokenType.GE, ">=", line, col))
+                else: tokens.append(Token(TokenType.IDENTIFIER, ">", line, col))
+            elif char == '<':
+                line, col = self.line, self.col; self.advance()
+                if self.peek() == '=': self.advance(); tokens.append(Token(TokenType.LE, "<=", line, col))
+                else: tokens.append(Token(TokenType.IDENTIFIER, "<", line, col))
+            elif char == '+': tokens.append(Token(TokenType.PLUS, self.advance(), self.line, self.col))
+            elif char == '-': tokens.append(Token(TokenType.MINUS, self.advance(), self.line, self.col))
+            elif char == '*': tokens.append(Token(TokenType.STAR, self.advance(), self.line, self.col))
+            elif char == '/': tokens.append(Token(TokenType.SLASH, self.advance(), self.line, self.col))
+            elif char == '%': tokens.append(Token(TokenType.MOD, self.advance(), self.line, self.col))
+            elif char == '^': tokens.append(Token(TokenType.CARET, self.advance(), self.line, self.col))
+            elif char == '&': tokens.append(Token(TokenType.AND, self.advance(), self.line, self.col))
+            elif char == '|': tokens.append(Token(TokenType.OR, self.advance(), self.line, self.col))
+            elif char == '?': tokens.append(Token(TokenType.QUESTION, self.advance(), self.line, self.col))
+            elif char == ':': tokens.append(Token(TokenType.COLON, self.advance(), self.line, self.col))
+            elif char == '@': tokens.append(Token(TokenType.AT, self.advance(), self.line, self.col))
+            else: raise SyntaxError(f"Unexpected character '{char}' at {self.line}:{self.col}")
+        tokens.append(Token(TokenType.EOF, None, self.line, self.col))
+        return tokens
+    def read_number(self):
+        res = ""; line, col = self.line, self.col
+        while self.peek() and (self.peek().isdigit() or self.peek() == '.'): res += self.advance()
+        return Token(TokenType.NUMBER, float(res) if '.' in res else int(res), line, col)
+    def read_string(self, quote):
+        res = ""; line, col = self.line, self.col; self.advance()
+        while self.peek() and self.peek() != quote: res += self.advance()
+        self.advance(); return Token(TokenType.STRING, res, line, col)
+    def read_variable(self):
+        res = "$"; line, col = self.line, self.col; self.advance()
+        while self.peek() and (self.peek().isalnum() or self.peek() == '_'): res += self.advance()
+        return Token(TokenType.VARIABLE, res, line, col)
+    def read_identifier(self):
+        res = ""; line, col = self.line, self.col
+        while self.peek() and (self.peek().isalnum() or self.peek() == '_'): res += self.advance()
+        if not res and self.peek() in ['>', '<', '*', '[', ']']: res = self.advance()
+        return Token(TokenType.IDENTIFIER, res, line, col)
+
 class EGLInterpreter:
     def __init__(self, initial_vars=None, serial_in=None):
-        self.globals = {"$pi": math.pi, "$e": math.e, "$last_key": "", "$last_key_src": ""}
+        self.globals = {"$pi": math.pi, "$e": math.e, "$last_key": "", "$last_key_src": "", "$result": 0}
         if initial_vars:
             for k, v in initial_vars.items():
                 self.globals[k if k.startswith('$') else '$'+k] = v
@@ -73,164 +357,137 @@ class EGLInterpreter:
         self.serial_in = serial_in if serial_in else []
         self.serial_out = []
         self.start_time = time.time()
+        self._init_builtins()
 
-        self.operators = {
-            ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul,
-            ast.Div: operator.truediv, ast.Mod: operator.mod, ast.Pow: operator.pow,
-            ast.BitXor: operator.xor, ast.BitAnd: getattr(operator, "and_"), ast.BitOr: getattr(operator, "or_"),
-            ast.Lt: operator.lt, ast.LtE: operator.le, ast.Gt: operator.gt,
-            ast.GtE: operator.ge, ast.Eq: operator.eq, ast.NotEq: operator.ne,
-            ast.USub: operator.neg, ast.UAdd: operator.pos
+    def _init_builtins(self):
+        self.op_map = {
+            TokenType.PLUS: operator.add, TokenType.MINUS: operator.sub,
+            TokenType.STAR: operator.mul, TokenType.SLASH: operator.truediv,
+            TokenType.MOD: operator.mod, TokenType.CARET: operator.xor,
+            TokenType.AND: operator.and_, TokenType.OR: operator.or_,
+            TokenType.EQ: operator.eq, TokenType.NE: operator.ne,
+            TokenType.LT: operator.lt, TokenType.LE: operator.le,
+            TokenType.GT: operator.gt, TokenType.GE: operator.ge
+        }
+        self.builtins = {
+            "cos": lambda x: math.cos(float(EGLValue(x))), "sin": lambda x: math.sin(float(EGLValue(x))),
+            "tan": lambda x: math.tan(float(EGLValue(x))), "sqrt": lambda x: math.sqrt(float(EGLValue(x))),
+            "abs": lambda x: abs(float(EGLValue(x))), "min": lambda a, b: min(float(EGLValue(a)), float(EGLValue(b))),
+            "max": lambda a, b: max(float(EGLValue(a)), float(EGLValue(b))), "pow": lambda a, b: pow(float(EGLValue(a)), float(EGLValue(b))),
+            "round": lambda x: round(float(EGLValue(x))), "len": lambda x: len(str(EGLValue(x))),
+            "int": lambda x: int(float(EGLValue(x))), "float": lambda x: float(EGLValue(x)), "str": lambda x: str(EGLValue(x)),
+            "hex": lambda x: hex(int(float(EGLValue(x)))), "zfill": lambda s, n: str(EGLValue(s)).zfill(int(float(EGLValue(n)))),
+            "ST": lambda s, start, length=None: str(EGLValue(s))[int(float(EGLValue(start))):int(float(EGLValue(start)))+int(float(EGLValue(length))) if length is not None else None],
+            "KS": lambda k: 1 if self.key_states.get(str(EGLValue(k))) else 0,
+            "MS": lambda: int((time.time() - self.start_time) * 1000),
+            "RN": lambda a, b: random.randint(int(float(EGLValue(a))), int(float(EGLValue(b)))),
+            "HC": lambda x1, y1, w1, h1, x2, y2, w2, h2: 1 if (float(EGLValue(x1)) < float(EGLValue(x2)) + float(EGLValue(w2)) and float(EGLValue(x1)) + float(EGLValue(w1)) > float(EGLValue(x2)) and float(y1) < float(y2) + float(h2) and float(y1) + float(h1) > float(y2)) else 0
         }
 
     def set_var(self, name, val):
-        target_val = val.val if isinstance(val, EGLValue) else val
-        if name in self.globals: self.globals[name] = target_val
-        elif self.scopes: self.scopes[-1][name] = target_val
-        else: self.globals[name] = target_val
+        v = val.val if isinstance(val, EGLValue) else val
+        if name.startswith('$'):
+            self.globals[name] = v
+            for scope in self.scopes:
+                if name in scope: scope[name] = v
+            return
+        if self.scopes:
+            for scope in reversed(self.scopes):
+                if name in scope:
+                    scope[name] = v
+                    return
+            self.scopes[-1][name] = v
+        else:
+            self.globals[name] = v
 
     def get_var(self, name):
-        for scope in reversed(self.scopes):
-            if name in scope: return scope[name]
-        return self.globals.get(name, 0)
+        if self.scopes:
+            for scope in reversed(self.scopes):
+                if name in scope: return scope[name]
+        if name in self.globals: return self.globals[name]
+        if not str(name).startswith('$'): return name
+        return 0
 
-    def eval_expr(self, expr):
-        if isinstance(expr, (int, float, EGLValue)): return EGLValue(expr)
-        s = str(expr).strip()
-        if not s: return EGLValue(0)
-
-        # Optimization for simple numeric literals
-        if s.isdigit(): return EGLValue(int(s))
+    def visit(self, node):
         try:
-            f = float(s)
-            if '.' in s: return EGLValue(f)
-            return EGLValue(int(f))
-        except: pass
-
-        all_vars = self.globals.copy()
-        for scope in self.scopes: all_vars.update(scope)
-
-        builtins = {
-            "cos": lambda x: math.cos(float(x)), "sin": lambda x: math.sin(float(x)),
-            "tan": lambda x: math.tan(float(x)), "sqrt": lambda x: math.sqrt(float(x)),
-            "abs": lambda x: abs(float(x)), "min": lambda a, b: min(float(a), float(b)),
-            "max": lambda a, b: max(float(a), float(b)), "pow": lambda a, b: pow(float(a), float(b)),
-            "round": lambda x: round(float(x)), "len": lambda x: len(str(x)),
-            "int": lambda x: int(float(x)), "float": lambda x: float(x), "str": str,
-            "hex": lambda x: hex(int(float(x))), "zfill": lambda s, n: str(s).zfill(int(float(n))),
-            "ST": lambda s, start, length=None: str(s)[int(float(start)):int(float(start))+int(float(length)) if length is not None else None],
-            "KS": lambda k: 1 if self.key_states.get(str(k)) else 0,
-            "MS": lambda: int((time.time() - self.start_time) * 1000),
-            "RN": lambda a, b: random.randint(int(float(a)), int(float(b))),
-            "HC": lambda x1, y1, w1, h1, x2, y2, w2, h2: 1 if (float(x1) < float(x2) + float(w2) and float(x1) + float(w1) > float(x2) and float(y1) < float(y2) + float(h2) and float(y1) + float(h1) > float(y2)) else 0
-        }
-
-        safe_to_real = {}
-        # Pre-process EGL variables into VARMARKERi
-        # To avoid nested replacements, we use a single pass with a regex
-        egl_vars = sorted(all_vars.keys(), key=len, reverse=True)
-        var_pattern = '|'.join([re.escape(k) for k in egl_vars])
-
-        processed = s
-        if egl_vars:
-            def var_repl_func(m):
-                vname = m.group(0)
-                # Find index in egl_vars
-                idx = egl_vars.index(vname)
-                safe_name = f"VARMARKER{idx}"
-                safe_to_real[safe_name] = vname
-                return safe_name
-            # This is still dangerous inside string literals.
-            # We must use the literal protection.
-
-        self.literals = []
-        def lit_repl(m):
-            self.literals.append(m.group(0))
-            return f"LITERALMARKER{len(self.literals)-1}"
-
-        processed = re.sub(r'"[^"]*"|\'[^\']*\'', lit_repl, s)
-
-        for i, vname in enumerate(egl_vars):
-            safe_name = f"V_{i}_V" # Use a more unique internal name
-            safe_to_real[safe_name] = vname
-            pattern = r'(?<![a-zA-Z0-9_\$])' + re.escape(vname) + r'(?![a-zA-Z0-9_])'
-            processed = re.sub(pattern, safe_name, processed)
-
-        for i, lit in enumerate(self.literals):
-            processed = processed.replace(f"LITERALMARKER{i}", lit)
-
-        def _eval_node(node):
-            if hasattr(ast, 'Constant') and isinstance(node, ast.Constant):
-                return node.value
-            # Use getattr to avoid DeprecationWarnings on newer Python while supporting older versions
-            elif isinstance(node, ast.AST) and hasattr(node, 'n'):
-                return node.n
-            elif isinstance(node, ast.AST) and hasattr(node, 's'):
-                return node.s
-            elif isinstance(node, ast.Name):
-                if node.id in safe_to_real: return all_vars.get(safe_to_real[node.id], 0)
-                if node.id == "V": # Handle our V markers if they get parsed weirdly
-                    pass
-                if node.id in ["True", "False", "None"]: return {"True":True, "False":False, "None":None}[node.id]
-                if node.id == "pi": return math.pi
-                return 0
-            elif isinstance(node, ast.Attribute):
-                if isinstance(node.value, ast.Name) and node.value.id == "math": return getattr(math, node.attr)
-                return 0
-            elif isinstance(node, ast.BinOp):
-                v1, v2 = _eval_node(node.left), _eval_node(node.right)
-                return self.operators[type(node.op)](EGLValue(v1), EGLValue(v2)).val
-            elif isinstance(node, ast.UnaryOp):
-                return self.operators[type(node.op)](EGLValue(_eval_node(node.operand))).val
-            elif isinstance(node, ast.Compare):
-                left = EGLValue(_eval_node(node.left))
-                for op, right in zip(node.ops, node.comparators):
-                    if not self.operators[type(op)](left, EGLValue(_eval_node(right))): return 0
-                    left = EGLValue(_eval_node(right))
-                return 1
-            elif isinstance(node, ast.Call):
-                func_name = node.func.id if isinstance(node.func, ast.Name) else None
-                if func_name in builtins:
-                    args = [_eval_node(arg) for arg in node.args]
-                    res = builtins[func_name](*args)
-                    return res.val if isinstance(res, EGLValue) else res
-            return 0
-
-        try:
-            tree = ast.parse(processed, mode='eval')
-            return EGLValue(_eval_node(tree.body))
+            if isinstance(node, BlockNode):
+                res = None
+                for stmt in node.statements: res = self.visit(stmt)
+                return res
+            elif isinstance(node, AssignNode):
+                val = self.visit(node.expr)
+                self.set_var(node.name, val); return val
+            elif isinstance(node, CommandNode):
+                args = [self.visit(arg) for arg in node.args]
+                return self.run_cmd(node.name, args)
+            elif isinstance(node, CallNode):
+                args = [self.visit(arg) for arg in node.args]
+                if node.name in self.builtins:
+                    res = self.builtins[node.name](*args)
+                    return EGLValue(res)
+                elif node.name in self.functions:
+                    params, body = self.functions[node.name]
+                    scope = {p: (a.val if isinstance(a, EGLValue) else a) for p, a in zip(params, args)}
+                    self.scopes.append(scope)
+                    self.visit(body)
+                    local = self.scopes.pop()
+                    res = local.get("$result", 0)
+                    if "$result" in self.globals: res = self.globals["$result"]
+                    return EGLValue(res)
+                else: raise NameError(f"Undefined function '{node.name}'")
+            elif isinstance(node, IfNode):
+                cond = self.visit(node.cond)
+                if isinstance(cond, EGLValue): cond = cond.val
+                if cond and cond != "0" and cond != 0: return self.visit(node.true_block)
+                elif node.false_block: return self.visit(node.false_block)
+            elif isinstance(node, WhileNode):
+                res = None
+                while True:
+                    cond = self.visit(node.cond)
+                    if isinstance(cond, EGLValue): cond = cond.val
+                    if not cond or cond == "0" or cond == 0: break
+                    res = self.visit(node.block)
+                return res
+            elif isinstance(node, ForNode):
+                start = float(EGLValue(self.visit(node.start)))
+                end = float(EGLValue(self.visit(node.end)))
+                step = float(EGLValue(self.visit(node.step)))
+                curr = start; res = None
+                while (curr <= end if step > 0 else curr >= end):
+                    self.set_var(node.var, curr)
+                    res = self.visit(node.block)
+                    curr += step
+                return res
+            elif isinstance(node, FuncDefNode):
+                self.functions[node.name] = (node.params, node.block)
+            elif isinstance(node, BinOpNode):
+                v1, v2 = self.visit(node.left), self.visit(node.right)
+                res = self.op_map[node.op](EGLValue(v1), EGLValue(v2))
+                if node.op in [TokenType.EQ, TokenType.NE, TokenType.LT, TokenType.LE, TokenType.GT, TokenType.GE]:
+                    return 1 if res else 0
+                return res.val if isinstance(res, EGLValue) else res
+            elif isinstance(node, UnaryOpNode):
+                val = EGLValue(self.visit(node.operand))
+                if node.op == TokenType.MINUS: return (-val).val
+                return val.val
+            elif isinstance(node, LiteralNode): return node.value
+            elif isinstance(node, VarNode): return self.get_var(node.name)
         except Exception as e:
-            # Final fallback: if s is wrapped in VARMARKER/LITERALMARKER,
-            # it might be a single variable or literal that AST didn't like?
-            # Actually, ast.parse(VARMARKER) should work.
-            # This is likely for things like color names: "red" (without quotes)
-            return EGLValue(s)
+            if node.line: print(f"RUNTIME ERROR at {node.line}:{node.col}: {e}")
+            else: print(f"RUNTIME ERROR: {e}")
+            raise e
+        return None
 
-    def parse_balanced(self, text, open_char, close_char):
-        depth, start = 0, -1
-        for i, char in enumerate(text):
-            if char == open_char:
-                if depth == 0: start = i
-                depth += 1
-            elif char == close_char:
-                depth -= 1
-                if depth == 0: return text[start+1:i], text[i+1:]
-        return None, text
-
-    def parse_args(self, args_str):
-        if not args_str: return []
-        args, depth, current, in_str = [], 0, "", False
-        for char in args_str:
-            if char == '"': in_str = not in_str
-            if not in_str:
-                if char == '(': depth += 1
-                elif char == ')': depth -= 1
-            if (char == ',' or char == ';') and depth == 0 and not in_str:
-                if current.strip(): args.append(current.strip())
-                current = ""
-            else: current += char
-        if current.strip(): args.append(current.strip())
-        return args
+    def eval_expr(self, expr_str):
+        if isinstance(expr_str, (int, float, EGLValue)): return EGLValue(expr_str)
+        if not expr_str: return EGLValue(0)
+        try:
+            lexer = Lexer(str(expr_str))
+            tokens = lexer.get_tokens()
+            parser = Parser(tokens)
+            node = parser.parse_expression()
+            return EGLValue(self.visit(node))
+        except Exception: return EGLValue(str(expr_str))
 
     def _get_rgba(self, c):
         if isinstance(c, (int, float)):
@@ -241,23 +498,19 @@ class EGLInterpreter:
         if cv.startswith('#'):
             if len(cv) == 7: return tuple(int(cv[i:i+2], 16) for i in (1, 3, 5)) + (255,)
             if len(cv) == 9: return tuple(int(cv[i:i+2], 16) for i in (1, 3, 5, 7))
-        if cv.startswith('rgb'):
-            nums = re.findall(r'\d+', cv)
-            if len(nums) >= 3:
-                r, g, b = map(int, nums[:3])
-                a = int(nums[3]) if len(nums) > 3 else 255
-                return (r, g, b, a)
-        colors = {"red":(255,0,0,255), "blue":(0,0,255,255), "green":(0,255,0,255), "black":(0,0,0,255), "white":(255,255,255,255), "gray":(128,128,128,255), "lightgray":(211,211,211,255), "yellow":(255,255,0,255), "orange":(255,165,0,255)}
+        colors = {"red":(255,0,0,255), "blue":(0,0,255,255), "green":(0,255,0,255), "black":(0,0,0,255), "white":(255,255,255,255), "gray":(128,128,128,255), "yellow":(255,255,0,255)}
         res = colors.get(cv.lower())
         if res: return res
         try:
             from PIL import ImageColor
             rgb = ImageColor.getrgb(cv)
             return rgb + (255,) if len(rgb) == 3 else rgb
-        except: return (255,255,255,255)
+        except Exception: return (255,255,255,255)
 
     def run_cmd(self, cmd, raw_args):
-        args = [self.eval_expr(a).val for a in raw_args]
+        if not raw_args and cmd in ['S', 'M', 'L', 'R', 'V', 'C', 'O', 'G', 'BX', 'AA', 'AV', 'AG', 'KP', 'KS', 'DX', 'LI', 'ST', 'FR', 'CP', 'HZ', 'MC', 'KC', 'B']:
+             return
+        args = [a.val if isinstance(a, EGLValue) else a for a in raw_args]
         sid = self.active_surface; draw = self.draws.get(sid); img = self.images.get(sid)
         try:
             if cmd == 'S':
@@ -310,14 +563,13 @@ class EGLInterpreter:
             elif cmd == 'MS': self.set_var("$result", int((time.time() - self.start_time) * 1000))
             elif cmd == 'LI':
                 try: self.images[str(args[0])] = Image.open(str(args[1])).convert("RGBA"); self.draws[str(args[0])] = ImageDraw.Draw(self.images[str(args[0])])
-                except: pass
+                except Exception: pass
             elif cmd == 'ST':
                 s_val = str(args[0]); start = int(args[1])
                 if len(args) > 2: self.set_var("$result", s_val[start:start+int(args[2])])
                 else: self.set_var("$result", s_val[start:])
             elif cmd == 'KS': self.set_var("$result", 1 if self.key_states.get(str(args[0])) else 0)
             elif cmd == 'KP': self.key_states[str(args[0])] = int(float(args[1]))
-            elif cmd == 'DB': print(f"DEBUG DUMP: Globals: {self.globals}\nArrays: {self.arrays.keys()}")
             elif cmd == 'HZ': self.hit_zones.append((float(args[1]), float(args[2]), float(args[3]), float(args[4]), str(args[5])))
             elif cmd == 'MC': self.event_queue.append(('MC', float(args[0]), float(args[1]), float(args[2])))
             elif cmd == 'KC': self.event_queue.append(('KC', str(args[0]), str(args[1])))
@@ -331,11 +583,10 @@ class EGLInterpreter:
                             if hx <= ex <= hx+hw and hy <= ey <= hy+hh:
                                 if hf in self.functions:
                                     self.set_var("$last_click_x", ex); self.set_var("$last_click_y", ey); self.set_var("$last_click_btn", eb)
-                                    self.run_code(self.functions[hf][1]); break
+                                    self.visit(self.functions[hf][1]); break
                     elif ev[0] == 'KC':
                         esrc, ek = ev[1:]; self.set_var("$last_key", ek); self.set_var("$last_key_src", esrc)
-                        if "ON_KEY" in self.functions: self.run_code(self.functions["ON_KEY"][1])
-            elif cmd == 'SA': self.set_var("$result", 1 if self.serial_in else 0)
+                        if "ON_KEY" in self.functions: self.visit(self.functions["ON_KEY"][1])
             elif cmd == 'B':
                 x, y, w, h = map(float, args[0:4]); c1, c2 = args[4], args[5]; dr = int(args[6]) if len(args) > 6 else 1
                 if img:
@@ -352,9 +603,12 @@ class EGLInterpreter:
                 if draw: draw.rectangle([x, y, x+w, y+h], fill=self._get_rgba(self.fill_color), outline=self._get_rgba(self.stroke_color), width=self.stroke_width)
             elif cmd == 'AA': self.arrays[str(args[0])] = [0] * int(float(args[1]))
             elif cmd == 'AV':
-                if str(args[0]) in self.arrays: self.arrays[str(args[0])][int(float(args[1]))] = args[2]
+                aid, idx = str(args[0]), int(float(args[1]))
+                if aid in self.arrays and 0 <= idx < len(self.arrays[aid]): self.arrays[aid][idx] = args[2]
             elif cmd == 'AG':
-                if str(args[0]) in self.arrays: self.set_var("$result", self.arrays[str(args[0])][int(float(args[1]))])
+                aid, idx = str(args[0]), int(float(args[1]))
+                if aid in self.arrays and 0 <= idx < len(self.arrays[aid]): self.set_var("$result", self.arrays[aid][idx])
+                else: self.set_var("$result", 0)
             elif cmd == 'K':
                 self.stroke_color = args[0]
                 if len(args) > 1: self.stroke_width = int(float(args[1]))
@@ -383,17 +637,13 @@ class EGLInterpreter:
                     if draw:
                         if self.fill_color and self.fill_color != "None": draw.polygon(pts, fill=self._get_rgba(self.fill_color), outline=self._get_rgba(self.stroke_color), width=self.stroke_width)
                         else: draw.line(pts + [pts[0]], fill=self._get_rgba(self.stroke_color), width=self.stroke_width)
-            elif cmd == 'Z':
-                if len(args) >= 4: self.clip = [float(a) for a in args[0:4]]
-                else: self.clip = None
             elif cmd == 'T':
                 if draw:
                     try: f = ImageFont.load_default(); draw.text(self.pos, str(args[0]), fill=self._get_rgba(self.stroke_color), font=f)
-                    except: pass
-            elif cmd == 'D': self.run_cmd('DX', [args[0], args[1], args[2]])
+                    except Exception: pass
             elif cmd == '>':
                 if args:
-                    msg = str(args[0]); self.serial_out.append(msg); sys.stdout.write("SERIAL OUT: " + msg + "\n"); sys.stdout.flush()
+                    msg = str(args[0]); self.serial_out.append(msg); sys.stdout.write("EGL_OUT: " + msg + "\n"); sys.stdout.flush()
             elif cmd == '<':
                 vn = str(args[0]).strip('()$ '); val = self.serial_in.pop(0) if self.serial_in else 0; self.set_var('$' + vn, val)
             elif cmd == '[': self.state_stack.append((self.pos, self.stroke_color, self.stroke_width, self.fill_color, self.active_surface, self.clip))
@@ -402,84 +652,17 @@ class EGLInterpreter:
         except Exception as e: print(f"ERROR executing {cmd} with {args}: {e}")
 
     def run_code(self, code):
-        i = 0
-        while i < len(code):
-            try:
-                if code[i].isspace() or code[i] == ';': i += 1; continue
-                if code[i] == '#':
-                    while i < len(code) and code[i] != '\n': i += 1
-                    continue
-                if code[i] == '$':
-                    m = re.match(r'(\$[a-zA-Z0-9_]+)\s*=\s*', code[i:])
-                    if m:
-                        vn = m.group(1); i += m.end(); j = i
-                        while j < len(code) and code[j] not in [';', '\n']: j += 1
-                        self.set_var(vn, self.eval_expr(code[i:j])); i = j; continue
-                if code[i] == ':':
-                    m = re.match(r':([a-zA-Z0-9_]+)', code[i:])
-                    if m:
-                        name = m.group(1); i += m.end(); ps, rest = self.parse_balanced(code[i:], '(', ')')
-                        params = [p.strip() for p in ps.split(',')] if ps else []; i = len(code) - len(rest)
-                        while i < len(code) and code[i] != '{': i += 1
-                        body, rest = self.parse_balanced(code[i:], '{', '}'); self.functions[name] = (params, body); i = len(code) - len(rest); continue
-                if code[i] == '?':
-                    i += 1; cond_s, rest = self.parse_balanced(code[i:], '(', ')'); i = len(code) - len(rest)
-                    while i < len(code) and code[i] != '{': i += 1
-                    body, rest = self.parse_balanced(code[i:], '{', '}'); next_i = len(code) - len(rest); eval_res = self.eval_expr(cond_s).val
-                    if eval_res: self.run_code(body)
-                    k = 0
-                    while k < len(rest) and rest[k].isspace(): k += 1
-                    if k < len(rest) and rest[k] == ':':
-                        k += 1
-                        while k < len(rest) and rest[k].isspace(): k += 1
-                        if k < len(rest) and rest[k] == '{':
-                            eb, rest2 = self.parse_balanced(rest[k:], '{', '}'); next_i = len(code) - len(rest2)
-                            if not eval_res: self.run_code(eb)
-                    i = next_i; continue
-                if code[i:i+2] == 'WH':
-                    i += 2; cond_s, rest = self.parse_balanced(code[i:], '(', ')'); i = len(code) - len(rest)
-                    while i < len(code) and code[i] != '{': i += 1
-                    body, rest = self.parse_balanced(code[i:], '{', '}'); next_i = len(code) - len(rest)
-                    while self.eval_expr(cond_s).val: self.run_code(body)
-                    i = next_i; continue
-                if code[i] == '@':
-                    i += 1; args_s, rest = self.parse_balanced(code[i:], '(', ')')
-                    pts = args_s.split(','); vn = pts[0].strip(); start, end, step = [float(self.eval_expr(x).val) for x in pts[1:]]
-                    i = len(code) - len(rest)
-                    while i < len(code) and code[i] != '{': i += 1
-                    body, rest = self.parse_balanced(code[i:], '{', '}'); next_i = len(code) - len(rest); curr = start
-                    while (curr <= end if step > 0 else curr >= end): self.set_var(vn, curr); self.run_code(body); curr += step
-                    i = next_i; continue
-                if code[i] == '!':
-                    m = re.match(r'!([a-zA-Z0-9_]+)', code[i:])
-                    if m:
-                        name = m.group(1); i += m.end(); args_r, rest = self.parse_balanced(code[i:], '(', ')'); i = len(code) - len(rest)
-                        if name in self.functions:
-                            params, body = self.functions[name]; vals = self.parse_args(args_r); self.scopes.append({p: self.eval_expr(v).val for p, v in zip(params, vals)})
-                            self.run_code(body); local = self.scopes.pop()
-                            if "$result" in local: self.set_var("$result", local["$result"])
-                        continue
-                m = re.match(r'([A-Z_]{1,10})', code[i:])
-                if m:
-                    cmd = m.group(1); i += m.end(); args_r = ""
-                    if i < len(code) and code[i] == '(': args_r, rest = self.parse_balanced(code[i:], '(', ')'); i = len(code) - len(rest)
-                    if cmd == '<': self.run_cmd('<', [args_r.strip('()$ ')])
-                    else: self.run_cmd(cmd, self.parse_args(args_r))
-                    continue
-                if code[i] in ['[', ']', '>', '<', '*']:
-                    cmd = code[i]; i += 1; args_r = ""
-                    if i < len(code) and code[i] == '(':
-                        args_r, rest = self.parse_balanced(code[i:], '(', ')')
-                        i = len(code) - len(rest)
-                        self.run_cmd(cmd, self.parse_args(args_r))
-                    else: self.run_cmd(cmd, [])
-                    continue
-                i += 1
-            except Exception as e:
-                line_no = code[:i].count('\n') + 1
-                ctx = code[max(0, i-20):min(len(code), i+20)].replace('\n', ' ')
-                print(f"SYNTAX ERROR on line {line_no}: {e}\nContext: ...{ctx}...")
-                i += 1
+        if not isinstance(code, str):
+            if isinstance(code, BlockNode): self.visit(code); return
+            else: raise ValueError(f"run_code expects string or BlockNode, got {type(code)}")
+        try:
+            lexer = Lexer(code)
+            tokens = lexer.get_tokens()
+            parser = Parser(tokens)
+            ast_root = parser.parse_program()
+            self.visit(ast_root)
+        except Exception as e:
+            print(f"INTERPRETER ERROR: {e}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -493,15 +676,13 @@ if __name__ == "__main__":
     if args.vars:
         for item in args.vars.split(','):
             try:
-                k, v = item.split('=');
-                try: init_vars[k] = float(v)
-                except: init_vars[k] = v
-            except: pass
+                k, v = item.split('='); init_vars[k] = float(v) if '.' in v or v.isnumeric() else v
+            except Exception: pass
     ser_in = []
     if args.serial_in:
         for val in args.serial_in.split(','):
-            try: ser_in.append(float(val))
-            except: ser_in.append(val)
+            try: ser_in.append(float(val) if '.' in val or val.isdigit() else val)
+            except Exception: ser_in.append(val)
     it = EGLInterpreter(initial_vars=init_vars, serial_in=ser_in)
     if args.events:
         for ev_s in args.events.split(';'):
