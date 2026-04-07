@@ -38,9 +38,13 @@ EGL is a compact, stack-based graphics language designed for high-performance se
 - `[` / `]`: Push/Pop graphics state.
 
 ## Control Flow & Logic (Enhanced in v1.7)
-- **Variables:** `$var = expr;`.
-- **Functions:** `:name(p1) { body }` / `!name(a1);`.
-- **Arrays:** `AA(id, size)`, `AV(id, idx, val)`, `AG(id, idx)`.
+- **Variables:** `$var = expr;`. Global variables start with `$`.
+- **Functions:** `:name(p1) { body }` (Def); `!name(a1);` (Call). Functions use `$result` for returns.
+- **Arrays:** `AA(id, size)` (Alloc); `AV(id, idx, val)` (Set); `AG(id, idx)` (Get).
 - **Loops:** `@($v, s, e, step) { body }` (For); `WH(expr) { body }` (While).
-- **Conditionals:** `?(expr) { t } : { f }`.
-- **Math/String Functions:** `cos()`, `sin()`, `tan()`, `sqrt()`, `abs()`, `min()`, `max()`, `pow()`, `round()`, `len()`, `str()`, `hex()`, `zfill()`, `ST()`, `KS()`, `MS()`, `RN()`, `HC()`, `MPX()`, `MPY()`.
+- **Conditionals:** `?(expr) { true_block } : { false_block }`.
+- **Operators:**
+    - Arithmetic: `+`, `-`, `*`, `/`, `%`
+    - Comparison: `==`, `!=`, `<`, `<=`, `>`, `>=`
+    - Bitwise: `&` (AND), `|` (OR), `^` (XOR), `~` (NOT), `<<` (LShift), `>>` (RShift)
+- **Built-in Functions:** `cos()`, `sin()`, `tan()`, `sqrt()`, `abs()`, `min()`, `max()`, `pow()`, `round()`, `len()`, `str()`, `hex()`, `int()`, `float()`, `zfill()`, `ST()`, `KS()`, `MS()`, `RN()`, `HC()`, `MPX()`, `MPY()`.

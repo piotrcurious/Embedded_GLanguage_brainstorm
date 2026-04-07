@@ -1,0 +1,28 @@
+# Bitwise and Shift Operations Test
+$pass = 0
+$fail = 0
+
+:ASSERT(cond, msg) {
+  ?(cond) { $pass = $pass + 1; >("[PASS] " + msg) }
+  : { $fail = $fail + 1; >("[FAIL] " + msg) }
+}
+
+# 1. Shifts
+!ASSERT(1 << 0 == 1, "1 << 0")
+!ASSERT(1 << 4 == 16, "1 << 4")
+!ASSERT(1024 >> 10 == 1, "1024 >> 10")
+!ASSERT(7 >> 1 == 3, "7 >> 1")
+
+# 2. Bitwise Logic
+!ASSERT(10 & 7 == 2, "10 & 7")
+!ASSERT(10 | 7 == 15, "10 | 7")
+!ASSERT(10 ^ 7 == 13, "10 ^ 7")
+!ASSERT(~0 == -1, "~0")
+!ASSERT(~(-1) == 0, "~-1")
+
+# 3. Precedence (Shifts should be higher than bitwise AND/OR/XOR but lower than +-)
+!ASSERT((1 + 1) << 2 == 8, "1 + 1 << 2 is (1+1)<<2 = 8")
+!ASSERT(1 << (2 + 1) == 8, "1 << 2 + 1 is 1<<(2+1) = 8")
+!ASSERT(10 & (1 << 1) == 2, "10 & 1 << 1 is 10 & (1<<1) = 2")
+
+>("[BITWISE SUMMARY] Passed: " + $pass + ", Failed: " + $fail)
