@@ -1,0 +1,29 @@
+# Chained Comparison Test
+$pass = 0
+$fail = 0
+
+:ASSERT(cond, msg) {
+  ?(cond) { $pass = $pass + 1; >("[PASS] " + msg) }
+  : { $fail = $fail + 1; >("[FAIL] " + msg) }
+}
+
+# 1. Chained Comparisons (left-to-right evaluation in Python-like manner)
+# Note: EGL/Python logic: (1 < 2 < 3) is (1 < 2) and (2 < 3) in Python,
+# but in our AST Visitor it's ((1 < 2) < 3) => (1 < 3) => 1.
+# Actually, our EGLValue(True) is 1. So 1 < 2 is 1. 1 < 3 is 1.
+
+!ASSERT(5 > 3 > 1 == 0, "5 > 3 is 1. 1 > 1 is 0.")
+!ASSERT((5 > 3) > 1 == 0, "(5 > 3) is 1. 1 > 1 is 0.")
+!ASSERT(1 < 2 < 3 == 1, "1 < 2 is 1. 1 < 3 is 1.")
+!ASSERT(10 == 10 == 1, "10 == 10 is 1. 1 == 1 is 1.")
+
+# 2. Mixed Comparisons
+!ASSERT(5 > 2 == 1, "5 > 2 is 1. 1 == 1 is 1.")
+!ASSERT(5 > 2 != 0, "5 > 2 is 1. 1 != 0 is 1.")
+
+# 3. Commands starting with > or < (Regression check)
+> "Testing Serial Output Command"
+< (val)
+# Expecting 0 if no serial in provided
+
+>("[CHAINED SUMMARY] Passed: " + $pass + ", Failed: " + $fail)

@@ -43,6 +43,9 @@ class EGLValue:
     def __xor__(self, other): return EGLValue(int(float(self.val)) ^ int(float(getattr(other, 'val', other))))
     def __and__(self, other): return EGLValue(int(float(self.val)) & int(float(getattr(other, 'val', other))))
     def __or__(self, other): return EGLValue(int(float(self.val)) | int(float(getattr(other, 'val', other))))
+    def __lshift__(self, other): return EGLValue(int(float(self.val)) << int(float(getattr(other, 'val', other))))
+    def __rshift__(self, other): return EGLValue(int(float(self.val)) >> int(float(getattr(other, 'val', other))))
+    def __invert__(self): return EGLValue(~int(float(self.val)))
     def __neg__(self):
         try: return EGLValue(-float(self.val))
         except: return EGLValue(0)
@@ -93,6 +96,7 @@ class TokenType(Enum):
     QUESTION = auto(); COLON = auto(); BANG = auto(); GT = auto(); LT = auto()
     LBRACKET = auto(); RBRACKET = auto()
     PLUS = auto(); MINUS = auto(); STAR = auto(); SLASH = auto(); MOD = auto(); CARET = auto()
+    LSHIFT = auto(); RSHIFT = auto(); TILDE = auto()
     AND = auto(); OR = auto(); EQ = auto(); NE = auto(); GE = auto(); LE = auto()
     IDENTIFIER = auto(); VARIABLE = auto(); NUMBER = auto(); STRING = auto()
     EOF = auto()
@@ -164,10 +168,14 @@ class Parser:
                     params.append(self.advance().value)
                     while self.match(TokenType.COMMA): params.append(self.advance().value)
                 self.expect(TokenType.RPAREN); self.expect(TokenType.LBRACE); block = self.parse_block(); return FuncDefNode(name, params, block, line, col)
+            elif self.peek().type == TokenType.LBRACE:
+                self.advance()
+                return self.parse_block()
             return None
         elif token.type == TokenType.QUESTION:
             self.advance(); self.expect(TokenType.LPAREN); cond = self.parse_expression(); self.expect(TokenType.RPAREN); self.expect(TokenType.LBRACE); true_block = self.parse_block()
             false_block = None
+            while self.match(TokenType.SEMICOLON): pass
             if self.match(TokenType.COLON):
                 if self.peek().type == TokenType.LBRACE: self.advance(); false_block = self.parse_block()
             return IfNode(cond, true_block, false_block, line, col)
@@ -182,9 +190,9 @@ class Parser:
             if self.match(TokenType.LPAREN): args = self.parse_args(); self.expect(TokenType.RPAREN)
             return CallNode(name, args, line, col)
         elif token.type in [TokenType.IDENTIFIER, TokenType.GT, TokenType.LT, TokenType.STAR, TokenType.LBRACKET, TokenType.RBRACKET]:
-            name = self.advance().value; args = []
+            token = self.advance(); name = token.value; args = []
             if self.match(TokenType.LPAREN): args = self.parse_args(); self.expect(TokenType.RPAREN)
-            elif name in ['>', '<', '*', '[', ']'] and self.peek().type in [TokenType.NUMBER, TokenType.STRING, TokenType.VARIABLE, TokenType.IDENTIFIER, TokenType.LPAREN]:
+            elif token.type in [TokenType.GT, TokenType.LT, TokenType.STAR, TokenType.LBRACKET, TokenType.RBRACKET] and self.peek().type in [TokenType.NUMBER, TokenType.STRING, TokenType.VARIABLE, TokenType.IDENTIFIER, TokenType.LPAREN]:
                 args = [self.parse_expression()]
             return CommandNode(name, args, line, col)
         elif self.match(TokenType.SEMICOLON): return None
@@ -205,25 +213,44 @@ class Parser:
         return args
     def parse_expression(self): return self.parse_comparison()
     def parse_comparison(self):
+        node = self.parse_bitwise_or()
+        while self.peek().type in [TokenType.EQ, TokenType.NE, TokenType.GE, TokenType.LE, TokenType.GT, TokenType.LT]:
+            line, col = self.peek().line, self.peek().col
+            op = self.advance().type; node = BinOpNode(node, op, self.parse_bitwise_or(), line, col)
+        return node
+    def parse_bitwise_or(self):
+        node = self.parse_bitwise_xor()
+        while self.peek().type == TokenType.OR:
+            line, col = self.peek().line, self.peek().col
+            op = self.advance().type; node = BinOpNode(node, op, self.parse_bitwise_xor(), line, col)
+        return node
+    def parse_bitwise_xor(self):
+        node = self.parse_bitwise_and()
+        while self.peek().type == TokenType.CARET:
+            line, col = self.peek().line, self.peek().col
+            op = self.advance().type; node = BinOpNode(node, op, self.parse_bitwise_and(), line, col)
+        return node
+    def parse_bitwise_and(self):
+        node = self.parse_shift()
+        while self.peek().type == TokenType.AND:
+            line, col = self.peek().line, self.peek().col
+            op = self.advance().type; node = BinOpNode(node, op, self.parse_shift(), line, col)
+        return node
+    def parse_shift(self):
         node = self.parse_arithmetic()
-        while self.peek().type in [TokenType.EQ, TokenType.NE, TokenType.GE, TokenType.LE]:
+        while self.peek().type in [TokenType.LSHIFT, TokenType.RSHIFT]:
             line, col = self.peek().line, self.peek().col
             op = self.advance().type; node = BinOpNode(node, op, self.parse_arithmetic(), line, col)
-        while self.peek().type == TokenType.IDENTIFIER and self.peek().value in ['>', '<']:
-            line, col = self.peek().line, self.peek().col
-            op_val = self.advance().value
-            op_type = TokenType.GT if op_val == '>' else TokenType.LT
-            node = BinOpNode(node, op_type, self.parse_arithmetic(), line, col)
         return node
     def parse_arithmetic(self):
         node = self.parse_term()
-        while self.peek().type in [TokenType.PLUS, TokenType.MINUS, TokenType.OR, TokenType.CARET]:
+        while self.peek().type in [TokenType.PLUS, TokenType.MINUS]:
             line, col = self.peek().line, self.peek().col
             op = self.advance().type; node = BinOpNode(node, op, self.parse_term(), line, col)
         return node
     def parse_term(self):
         node = self.parse_factor()
-        while self.peek().type in [TokenType.STAR, TokenType.SLASH, TokenType.MOD, TokenType.AND]:
+        while self.peek().type in [TokenType.STAR, TokenType.SLASH, TokenType.MOD]:
             line, col = self.peek().line, self.peek().col
             op = self.advance().type; node = BinOpNode(node, op, self.parse_factor(), line, col)
         return node
@@ -232,6 +259,7 @@ class Parser:
         line, col = token.line, token.col
         if token.type == TokenType.PLUS: self.advance(); return UnaryOpNode(TokenType.PLUS, self.parse_factor(), line, col)
         if token.type == TokenType.MINUS: self.advance(); return UnaryOpNode(TokenType.MINUS, self.parse_factor(), line, col)
+        if token.type == TokenType.TILDE: self.advance(); return UnaryOpNode(TokenType.TILDE, self.parse_factor(), line, col)
         return self.parse_primary()
     def parse_primary(self):
         token = self.peek()
@@ -239,7 +267,7 @@ class Parser:
         token = self.advance()
         if token.type == TokenType.NUMBER or token.type == TokenType.STRING: return LiteralNode(token.value, line, col)
         elif token.type == TokenType.VARIABLE: return VarNode(token.value, line, col)
-        elif token.type == TokenType.IDENTIFIER:
+        elif token.type in [TokenType.IDENTIFIER, TokenType.GT, TokenType.LT]:
             if self.match(TokenType.LPAREN): args = self.parse_args(); self.expect(TokenType.RPAREN); return CallNode(token.value, args, line, col)
             return VarNode(token.value, line, col)
         elif token.type == TokenType.LPAREN: expr = self.parse_expression(); self.expect(TokenType.RPAREN); return expr
@@ -261,7 +289,7 @@ class Lexer:
             char = self.peek()
             if char.isspace():
                 if char == '\n' and paren_depth == 0:
-                    if tokens and tokens[-1].type not in [TokenType.SEMICOLON, TokenType.LBRACE, TokenType.COMMA]:
+                    if tokens and tokens[-1].type not in [TokenType.SEMICOLON, TokenType.LBRACE, TokenType.COMMA, TokenType.RBRACE]:
                         tokens.append(Token(TokenType.SEMICOLON, ";", self.line, self.col))
                 self.advance()
             elif char == '#':
@@ -293,11 +321,13 @@ class Lexer:
             elif char == '>':
                 line, col = self.line, self.col; self.advance()
                 if self.peek() == '=': self.advance(); tokens.append(Token(TokenType.GE, ">=", line, col))
-                else: tokens.append(Token(TokenType.IDENTIFIER, ">", line, col))
+                elif self.peek() == '>': self.advance(); tokens.append(Token(TokenType.RSHIFT, ">>", line, col))
+                else: tokens.append(Token(TokenType.GT, ">", line, col))
             elif char == '<':
                 line, col = self.line, self.col; self.advance()
                 if self.peek() == '=': self.advance(); tokens.append(Token(TokenType.LE, "<=", line, col))
-                else: tokens.append(Token(TokenType.IDENTIFIER, "<", line, col))
+                elif self.peek() == '<': self.advance(); tokens.append(Token(TokenType.LSHIFT, "<<", line, col))
+                else: tokens.append(Token(TokenType.LT, "<", line, col))
             elif char == '+': tokens.append(Token(TokenType.PLUS, self.advance(), self.line, self.col))
             elif char == '-': tokens.append(Token(TokenType.MINUS, self.advance(), self.line, self.col))
             elif char == '*': tokens.append(Token(TokenType.STAR, self.advance(), self.line, self.col))
@@ -306,6 +336,7 @@ class Lexer:
             elif char == '^': tokens.append(Token(TokenType.CARET, self.advance(), self.line, self.col))
             elif char == '&': tokens.append(Token(TokenType.AND, self.advance(), self.line, self.col))
             elif char == '|': tokens.append(Token(TokenType.OR, self.advance(), self.line, self.col))
+            elif char == '~': tokens.append(Token(TokenType.TILDE, self.advance(), self.line, self.col))
             elif char == '?': tokens.append(Token(TokenType.QUESTION, self.advance(), self.line, self.col))
             elif char == ':': tokens.append(Token(TokenType.COLON, self.advance(), self.line, self.col))
             elif char == '@': tokens.append(Token(TokenType.AT, self.advance(), self.line, self.col))
@@ -365,6 +396,7 @@ class EGLInterpreter:
             TokenType.STAR: operator.mul, TokenType.SLASH: operator.truediv,
             TokenType.MOD: operator.mod, TokenType.CARET: operator.xor,
             TokenType.AND: operator.and_, TokenType.OR: operator.or_,
+            TokenType.LSHIFT: operator.lshift, TokenType.RSHIFT: operator.rshift,
             TokenType.EQ: operator.eq, TokenType.NE: operator.ne,
             TokenType.LT: operator.lt, TokenType.LE: operator.le,
             TokenType.GT: operator.gt, TokenType.GE: operator.ge
@@ -471,6 +503,7 @@ class EGLInterpreter:
             elif isinstance(node, UnaryOpNode):
                 val = EGLValue(self.visit(node.operand))
                 if node.op == TokenType.MINUS: return (-val).val
+                if node.op == TokenType.TILDE: return (~val).val
                 return val.val
             elif isinstance(node, LiteralNode): return node.value
             elif isinstance(node, VarNode): return self.get_var(node.name)
@@ -510,7 +543,7 @@ class EGLInterpreter:
         except Exception: return (255,255,255,255)
 
     def run_cmd(self, cmd, raw_args):
-        if not raw_args and cmd in ['S', 'M', 'L', 'R', 'V', 'C', 'O', 'G', 'BX', 'AA', 'AV', 'AG', 'KP', 'KS', 'DX', 'LI', 'ST', 'FR', 'CP', 'HZ', 'MC', 'KC', 'B']:
+        if not raw_args and cmd in ['S', 'M', 'L', 'R', 'V', 'C', 'O', 'G', 'BX', 'AA', 'AV', 'AG', 'KP', 'KS', 'DX', 'LI', 'ST', 'FR', 'CP', 'HZ', 'MC', 'KC', 'B', 'Z']:
              return
         args = [a.val if isinstance(a, EGLValue) else a for a in raw_args]
         sid = self.active_surface; draw = self.draws.get(sid); img = self.images.get(sid)
@@ -520,8 +553,13 @@ class EGLInterpreter:
                 self.images["main"] = Image.new("RGBA", (w, h), self._get_rgba(bg)); self.draws["main"] = ImageDraw.Draw(self.images["main"])
                 self.front_buffer = Image.new("RGBA", (w, h), self._get_rgba(bg)); self.active_surface = "main"; self.clip = None
             elif cmd == 'CL':
-                if img: img.paste(self._get_rgba(args[0]), [0, 0, img.width, img.height])
-            elif cmd == 'FB':
+                if img:
+                    if self.clip:
+                        cx, cy, cw, ch = self.clip
+                        img.paste(self._get_rgba(args[0]), [cx, cy, cx+cw, cy+ch])
+                    else:
+                        img.paste(self._get_rgba(args[0]), [0, 0, img.width, img.height])
+            elif cmd == 'FB' or cmd == 'VS':
                 if "main" in self.images and self.front_buffer: self.front_buffer.paste(self.images["main"])
                 if self.target_fps > 0: time.sleep(1.0 / self.target_fps)
             elif cmd == 'FR': self.target_fps = int(float(args[0]))
@@ -629,7 +667,18 @@ class EGLInterpreter:
             elif cmd == 'BX':
                 if len(args) >= 4: x, y, w, h = map(float, args[0:4])
                 else: x, y = self.pos; w, h = map(float, args[0:2])
-                if draw: draw.rectangle([x, y, x+w, y+h], fill=self._get_rgba(self.fill_color), outline=self._get_rgba(self.stroke_color), width=self.stroke_width)
+                if draw:
+                    if self.clip:
+                        cx, cy, cw, ch = self.clip
+                        nx, ny = max(x, cx), max(y, cy)
+                        nw, nh = min(x+w, cx+cw) - nx, min(y+h, cy+ch) - ny
+                        if nw > 0 and nh > 0:
+                            draw.rectangle([nx, ny, nx+nw, ny+nh], fill=self._get_rgba(self.fill_color), outline=self._get_rgba(self.stroke_color), width=self.stroke_width)
+                    else:
+                        draw.rectangle([x, y, x+w, y+h], fill=self._get_rgba(self.fill_color), outline=self._get_rgba(self.stroke_color), width=self.stroke_width)
+            elif cmd == 'Z':
+                if args and len(args) >= 4: self.clip = (int(float(args[0])), int(float(args[1])), int(float(args[2])), int(float(args[3])))
+                else: self.clip = None
             elif cmd == 'AA': self.arrays[str(args[0])] = [0] * int(float(args[1]))
             elif cmd == 'AV':
                 aid, idx = str(args[0]), int(float(args[1]))
