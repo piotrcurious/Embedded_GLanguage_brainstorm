@@ -29,6 +29,7 @@ EGL is a compact, stack-based graphics language designed for high-performance se
 - `S(w, h, [bg])`: Initialize main surface (Double Buffered).
 - `FB()` / `VS()`: Flip Buffer and Wait Sync.
 - `P(id, [w, h])`: Define/switch to an off-screen buffer.
+- `LD(id, x, y, w, h, data)`: **Load Data**: Update a sub-region of buffer `id` with hex-encoded palette indices (2 chars per pixel).
 - `DX(id, x, y, [rot], [scale], [alpha], [sx, sy, sw, sh])`: Advanced blit.
 - `B(x, y, w, h, c1, c2, [dir])`, `BX(x, y, w, h)`: Gradient/Fast Rectangle.
 - `K(color, [width])`, `F(color)`: Style settings. Colors can be palette indices (0-255).
@@ -42,4 +43,4 @@ EGL is a compact, stack-based graphics language designed for high-performance se
 - **Arrays:** `AA(id, size)`, `AV(id, idx, val)`, `AG(id, idx)`.
 - **Loops:** `@($v, s, e, step) { body }` (For); `WH(expr) { body }` (While).
 - **Conditionals:** `?(expr) { t } : { f }`.
-- **Math/String Functions:** `cos()`, `sin()`, `tan()`, `sqrt()`, `abs()`, `min()`, `max()`, `pow()`, `round()`, `len()`, `str()`, `hex()`, `zfill()`, `ST()`, `KS()`, `MS()`, `RN()`, `HC()`.
+- **Math/String Functions:** `cos()`, `sin()`, `tan()`, `sqrt()`, `abs()`, `min()`, `max()`, `pow()`, `round()`, `len()`, `str()`, `hex()`, `zfill()`, `ST()`, `KS()`, `MS()`, `RN()`, `HC()`, `MPX()`, `MPY()`.
