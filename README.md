@@ -13,8 +13,31 @@ EGL is a compact, Turing-complete graphics language designed for serial communic
 ## Quick Start
 Run the interpreter on any `.egl` script:
 ```bash
-python3 egl_interpreter.py demo_game.egl --output game.png
+python3 egl_interpreter.py demo_game.egl --output game_result.png
 ```
+
+## Visual Gallery
+EGL's versatility and performance can be seen in these automatically generated results:
+
+### Interactive Game Simulation (`demo_game.egl`)
+Displays sprites, double-buffering, and real-time score tracking.
+![Game Result](game_result.png)
+
+### Telemetry Dashboard (`demo_dashboard.egl`)
+Showcases vector gauges, dynamic text, and nested UI containers.
+![Dashboard Result](dashboard_result.png)
+
+### Progressive Refinement (`progressive_cube_test.py`)
+Simulates low-bandwidth 3D sprite updates using an LFSR-sequenced `LD` (Load Data) command.
+![Progressive Result](progressive_result.png)
+
+### Stress & Recursion Test (`stress_test.egl`)
+Verifies deep recursion (Ackermann) and high-volume rendering of 1000+ primitives.
+![Stress Result](stress_result.png)
+
+### Comprehensive Validation (`comprehensive_test.egl`)
+Automated suite verifying all v1.7 logical assertions.
+![Comprehensive Result](comprehensive_result.png)
 
 ## Documentation
 - [EGL Specification v1.7](EGL_spec.md) - Full command reference.

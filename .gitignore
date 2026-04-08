@@ -3,9 +3,10 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# Output images
-*.png
-
 # Logs
 *.log
 *.txt
+
+# Allow specific result images
+!*_result.png
+!progressive_result.png
